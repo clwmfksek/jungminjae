@@ -91,7 +91,9 @@ export default function Chat() {
             setMessages(prev => [...prev, newMessage]);
             scrollToBottom();
           } else if (payload.eventType === 'DELETE') {
-            setMessages([]);
+            console.log('채팅 초기화됨');
+            setMessages([]); // 모든 메시지 삭제
+            setError(null); // 에러 메시지 초기화
           }
         }
       )
@@ -162,6 +164,8 @@ export default function Chat() {
     }
 
     try {
+      setError(null); // 에러 메시지 초기화
+
       const { error } = await supabase
         .from('messages')
         .delete()
@@ -172,7 +176,7 @@ export default function Chat() {
         throw error;
       }
       
-      setMessages([]);
+      // 실시간 이벤트로 처리되므로 여기서는 모달만 닫음
       setIsResetModalOpen(false);
     } catch (err) {
       console.error('Error resetting chat:', err);
