@@ -3,6 +3,7 @@ import "./App.css";
 import { supabase, CounterRecord } from "./lib/supabase";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import Chat from './components/Chat'
+import PasswordModal from './components/PasswordModal'
 
 interface PersonCount {
   name: string;
@@ -29,6 +30,8 @@ function App() {
   }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const RESET_PASSWORD = import.meta.env.VITE_RESET_PASSWORD || '1234';
 
   // 실시간 업데이트 처리 함수를 메모이제이션
   const handleRealtimeUpdate = useCallback((payload: any) => {
@@ -222,6 +225,19 @@ function App() {
     setTimeout(() => setConfetti([]), 800);
   };
 
+  const handleResetAttempt = () => {
+    setIsResetModalOpen(true);
+  };
+
+  const handleResetConfirm = async (password: string) => {
+    if (password === RESET_PASSWORD) {
+      await resetCount();
+      setIsResetModalOpen(false);
+    } else {
+      alert('비밀번호가 일치하지 않습니다.');
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -256,7 +272,7 @@ function App() {
           <button onClick={() => incrementCount(0)} className="increment-button">
             날먹하기
           </button>
-          <button onClick={resetCount} className="reset-button">
+          <button onClick={handleResetAttempt} className="reset-button">
             리셋
           </button>
         </div>
@@ -284,6 +300,12 @@ function App() {
           );
         })}
       </div>
+      <PasswordModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        onSubmit={handleResetConfirm}
+        title="리셋 비밀번호 입력"
+      />
     </div>
   );
 }
