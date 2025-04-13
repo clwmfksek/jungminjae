@@ -1,7 +1,8 @@
 :root {
   --primary: #333D4B;
   --secondary: #3182F6;
-  --danger: #F03E3E;
+  --secondary-hover: #1B64DA;
+  --secondary-active: #1B64DA;
   --background: #FFFFFF;
   --card-background: #F9FAFB;
   --text-primary: #333D4B;
@@ -92,9 +93,23 @@ button {
   font-size: 1.125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05),
               0 2px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.05);
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
 button:hover {
@@ -107,9 +122,21 @@ button:active {
   transform: translateY(0);
 }
 
+button:active::after {
+  opacity: 1;
+}
+
 .reset-button {
-  background-color: var(--danger);
+  background-color: var(--secondary);
   color: white;
+}
+
+.reset-button:hover {
+  background-color: var(--secondary-hover);
+}
+
+.reset-button:active {
+  background-color: var(--secondary-active);
 }
 
 .counter-value {
@@ -137,5 +164,64 @@ button:active {
   button {
     padding: 1rem;
     font-size: 1rem;
+  }
+}
+
+.confetti-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.confetti-style3 {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.confetti-style3.circle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  animation: confetti-pop 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.confetti-style3.square {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  animation: confetti-float 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+@keyframes confetti-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0) rotate(0deg);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(1) rotate(var(--rotation));
+    opacity: 0;
+  }
+}
+
+@keyframes confetti-float {
+  0% {
+    transform: translate(-50%, -50%) scale(0) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+    transform: translate(calc(var(--tx) * 0.5), calc(var(--ty) * 0.5)) scale(0.8) rotate(var(--rotation));
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0.3) rotate(calc(var(--rotation) * 2));
+    opacity: 0;
   }
 }
