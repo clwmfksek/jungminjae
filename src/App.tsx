@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 import { supabase, CounterRecord } from "./lib/supabase";
 import { RealtimeChannel } from "@supabase/supabase-js";
+import Chat from './components/Chat'
 
 interface PersonCount {
   name: string;
@@ -236,7 +237,33 @@ function App() {
   }
 
   return (
-    <>
+    <div className="app-container">
+      <div className="counter-section">
+        <h1>날먹 카운터</h1>
+        {error && (
+          <div style={{ 
+            color: 'red', 
+            margin: '10px', 
+            padding: '10px', 
+            border: '1px solid red',
+            borderRadius: '4px'
+          }}>
+            에러: {error}
+          </div>
+        )}
+        <div className="count-display">{people[0].count}회</div>
+        <div className="button-container">
+          <button onClick={() => incrementCount(0)} className="increment-button">
+            날먹하기
+          </button>
+          <button onClick={resetCount} className="reset-button">
+            리셋
+          </button>
+        </div>
+      </div>
+      
+      <Chat />
+      
       <div className="confetti-container">
         {confetti.map((conf) => {
           const style = {
@@ -257,34 +284,7 @@ function App() {
           );
         })}
       </div>
-      <h1>과제 날먹 카운터</h1>
-      {error && (
-        <div style={{ 
-          color: 'red', 
-          margin: '10px', 
-          padding: '10px', 
-          border: '1px solid red',
-          borderRadius: '4px'
-        }}>
-          에러: {error}
-        </div>
-      )}
-      <div className="card">
-        {people.map((person, index) => (
-          <div key={person.name}>
-            <button onClick={() => incrementCount(index)}>
-              {person.name}
-              <span className="counter-value">{person.count}회</span>
-            </button>
-          </div>
-        ))}
-        <div>
-          <button onClick={resetCount} className="reset-button">
-            전체 초기화
-          </button>
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
 

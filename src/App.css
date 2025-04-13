@@ -225,3 +225,33 @@ button:active::after {
     opacity: 0;
   }
 }
+
+.app-container {
+  min-height: 100vh;
+  padding: 2rem;
+  background-color: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.counter-section {
+  position: relative;
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  overflow: hidden;
+}
+
+.chat-section {
+  flex: 1;
+  min-height: 500px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
