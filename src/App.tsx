@@ -1,20 +1,10 @@
 import { useState, useEffect } from "react";
 import "./App.css";
+import { supabase, CounterRecord } from "./lib/supabase";
 
 interface PersonCount {
   name: string;
   count: number;
-}
-
-interface Confetti {
-  id: number;
-  x: number;
-  y: number;
-  color: string;
-  tx: number;
-  ty: number;
-  rotation: number;
-  type: 'circle' | 'square';
 }
 
 function App() {
@@ -24,20 +14,64 @@ function App() {
     { name: "박예준", count: 0 },
   ];
 
-  const [people, setPeople] = useState<PersonCount[]>(() => {
-    const savedData = localStorage.getItem("peopleCounters");
-    return savedData ? JSON.parse(savedData) : initialPeople;
-  });
-
-  const [confetti, setConfetti] = useState<Confetti[]>([]);
+  const [people, setPeople] = useState<PersonCount[]>(initialPeople);
+  const [confetti, setConfetti] = useState<Array<{
+    id: number;
+    x: number;
+    y: number;
+    color: string;
+    tx: number;
+    ty: number;
+    rotation: number;
+    type: 'circle' | 'square';
+  }>>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem("peopleCounters", JSON.stringify(people));
-  }, [people]);
+    fetchCounts();
+  }, []);
+
+  const fetchCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('counters')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const counts = data.map((record: CounterRecord) => ({
+          name: record.name,
+          count: record.count
+        }));
+        
+        if (counts.length === 0) {
+          // 초기 데이터 생성
+          await Promise.all(
+            initialPeople.map(person =>
+              supabase
+                .from('counters')
+                .insert({ name: person.name, count: 0 })
+            )
+          );
+          setPeople(initialPeople);
+        } else {
+          setPeople(counts);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching counts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const createConfetti = () => {
     const colors = ['#3182F6', '#00D3BE', '#FF6B6B', '#FFD93D', '#4ADE80'];
-    const newConfetti: Confetti[] = [];
+    const newConfetti = [];
     const centerX = window.innerWidth / 2;
     const centerY = window.innerHeight / 2;
     
@@ -47,6 +81,7 @@ function App() {
       const tx = Math.cos(angle) * velocity;
       const ty = Math.sin(angle) * velocity;
       const rotation = Math.random() * 360;
+      const type = Math.random() > 0.5 ? 'circle' as const : 'square' as const;
       
       newConfetti.push({
         id: Date.now() + i,
@@ -56,7 +91,7 @@ function App() {
         tx,
         ty,
         rotation,
-        type: Math.random() > 0.5 ? 'circle' : 'square'
+        type
       });
     }
     
@@ -64,22 +99,64 @@ function App() {
     setTimeout(() => setConfetti([]), 800);
   };
 
-  const incrementCount = (index: number) => {
-    setPeople((currentPeople) => {
-      const newPeople = [...currentPeople];
-      newPeople[index] = {
-        ...newPeople[index],
-        count: newPeople[index].count + 1,
-      };
-      return newPeople;
-    });
+  const incrementCount = async (index: number) => {
+    try {
+      const person = people[index];
+      const newCount = person.count + 1;
+
+      const { error } = await supabase
+        .from('counters')
+        .update({ count: newCount, updated_at: new Date().toISOString() })
+        .eq('name', person.name);
+
+      if (error) {
+        throw error;
+      }
+
+      setPeople(currentPeople => {
+        const newPeople = [...currentPeople];
+        newPeople[index] = {
+          ...newPeople[index],
+          count: newCount,
+        };
+        return newPeople;
+      });
+    } catch (error) {
+      console.error('Error incrementing count:', error);
+    }
   };
 
-  const resetCount = () => {
-    setPeople(initialPeople);
-    localStorage.setItem("peopleCounters", JSON.stringify(initialPeople));
-    createConfetti();
+  const resetCount = async () => {
+    try {
+      const { error } = await supabase
+        .from('counters')
+        .update({ count: 0, updated_at: new Date().toISOString() })
+        .in('name', people.map(p => p.name));
+
+      if (error) {
+        throw error;
+      }
+
+      setPeople(people.map(person => ({ ...person, count: 0 })));
+      createConfetti();
+    } catch (error) {
+      console.error('Error resetting counts:', error);
+    }
   };
+
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        color: 'var(--text-primary)'
+      }}>
+        로딩 중...
+      </div>
+    );
+  }
 
   return (
     <>
