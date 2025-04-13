@@ -41,35 +41,28 @@ function App() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
           table: 'counters',
         },
-        async (payload) => {
-          if (payload.eventType === 'UPDATE') {
-            const { data, error } = await supabase
-              .from('counters')
-              .select('*')
-              .order('name');
+        (payload) => {
+          const updatedRecord = payload.new as CounterRecord;
+          
+          setPeople(currentPeople => {
+            const newPeople = currentPeople.map(person =>
+              person.name === updatedRecord.name
+                ? { ...person, count: updatedRecord.count }
+                : person
+            );
 
-            if (error) {
-              setError(error.message);
-              return;
+            // 모든 카운터가 0인지 확인
+            const allZero = newPeople.every(p => p.count === 0);
+            if (allZero) {
+              createConfetti();
             }
 
-            if (data) {
-              const newPeople = data.map(record => ({
-                name: record.name,
-                count: record.count
-              }));
-              setPeople(newPeople);
-
-              const allZero = newPeople.every(person => person.count === 0);
-              if (allZero) {
-                createConfetti();
-              }
-            }
-          }
+            return newPeople;
+          });
         }
       )
       .subscribe();
@@ -83,7 +76,9 @@ function App() {
     const initialize = async () => {
       try {
         setLoading(true);
+        // 먼저 초기 데이터를 가져옵니다
         await fetchCounts();
+        // 그 다음 실시간 구독을 설정합니다
         channel = await setupRealtimeSubscription();
       } catch (error) {
         setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
@@ -172,23 +167,12 @@ function App() {
       const person = people[index];
       const newCount = person.count + 1;
 
-      setPeople(currentPeople => 
-        currentPeople.map((p, i) => 
-          i === index ? { ...p, count: newCount } : p
-        )
-      );
-
       const { error } = await supabase
         .from('counters')
         .update({ count: newCount })
         .eq('name', person.name);
 
       if (error) {
-        setPeople(currentPeople => 
-          currentPeople.map((p, i) => 
-            i === index ? { ...p, count: person.count } : p
-          )
-        );
         setError(error.message);
         throw error;
       }
@@ -199,18 +183,12 @@ function App() {
 
   const resetCount = async () => {
     try {
-      setPeople(currentPeople => 
-        currentPeople.map(p => ({ ...p, count: 0 }))
-      );
-      createConfetti();
-
       const { error } = await supabase
         .from('counters')
         .update({ count: 0 })
         .in('name', people.map(p => p.name));
 
       if (error) {
-        setPeople(people);
         setError(error.message);
         throw error;
       }
