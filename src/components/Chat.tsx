@@ -78,42 +78,39 @@ export default function Chat() {
       .on(
         'postgres_changes',
         {
-          event: '*', // INSERT, UPDATE, DELETE 모든 이벤트 구독
+          event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          broadcast: { self: true } // 자신의 변경사항도 수신
         },
-        (payload: any) => {
-          console.log('실시간 업데이트:', payload);
-          
-          switch (payload.eventType) {
-            case 'INSERT': {
-              if (payload.new && typeof payload.new === 'object') {
-                const newMessage = payload.new as Message;
-                setMessages(prev => [...prev, newMessage]);
-                scrollToBottom();
-              }
-              break;
-            }
-            case 'DELETE': {
-              console.log('채팅 초기화됨');
-              setMessages([]); // 모든 메시지 삭제
-              setError(null); // 에러 메시지 초기화
-              break;
-            }
-          }
+        (payload) => {
+          const newMessage = payload.new as Message;
+          // 자신이 보낸 메시지는 이미 화면에 표시되어 있으므로 무시
+          setMessages(prev => {
+            const isDuplicate = prev.some(msg => msg.id === newMessage.id);
+            if (isDuplicate) return prev;
+            return [...prev, newMessage];
+          });
+          scrollToBottom();
         }
       )
-      .subscribe(async (status) => {
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+        },
+        () => {
+          setMessages([]);
+        }
+      )
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('실시간 채팅 연결됨');
-          // 구독 시작 시 최신 메시지 다시 로드
-          await fetchMessages(true);
         }
       });
 
     return () => {
-      console.log('채팅 연결 종료');
       channel.unsubscribe();
     };
   }, [fetchMessages, scrollToBottom]);
@@ -147,16 +144,25 @@ export default function Chat() {
     if (!newMessage.trim() || !userName.trim()) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('messages')
         .insert([
           {
             content: newMessage.trim(),
             user_name: userName.trim(),
           },
-        ]);
+        ])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // 서버에서 받은 응답으로 메시지 추가
+      if (data) {
+        setMessages(prev => [...prev, data]);
+        scrollToBottom();
+      }
+      
       setNewMessage('');
     } catch (err) {
       console.error('Error sending message:', err);
@@ -171,8 +177,6 @@ export default function Chat() {
     }
 
     try {
-      setError(null); // 에러 메시지 초기화
-
       const { error } = await supabase
         .from('messages')
         .delete()
@@ -183,7 +187,7 @@ export default function Chat() {
         throw error;
       }
       
-      // 실시간 이벤트로 처리되므로 여기서는 모달만 닫음
+      setMessages([]);
       setIsResetModalOpen(false);
     } catch (err) {
       console.error('Error resetting chat:', err);
