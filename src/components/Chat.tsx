@@ -50,7 +50,11 @@ export default function Chat() {
       
       setMessages(prev => {
         if (isInitial) return newMessages;
-        return [...prev, ...newMessages];
+        // 중복 메시지 제거
+        const uniqueMessages = newMessages.filter(
+          newMsg => !prev.some(prevMsg => prevMsg.id === newMsg.id)
+        );
+        return [...prev, ...uniqueMessages];
       });
 
       if (isInitial) {
@@ -80,7 +84,12 @@ export default function Chat() {
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          setMessages(prev => [...prev, newMessage]);
+          // 자신이 보낸 메시지는 이미 화면에 표시되어 있으므로 무시
+          setMessages(prev => {
+            const isDuplicate = prev.some(msg => msg.id === newMessage.id);
+            if (isDuplicate) return prev;
+            return [...prev, newMessage];
+          });
           scrollToBottom();
         }
       )
@@ -135,16 +144,25 @@ export default function Chat() {
     if (!newMessage.trim() || !userName.trim()) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('messages')
         .insert([
           {
             content: newMessage.trim(),
             user_name: userName.trim(),
           },
-        ]);
+        ])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // 서버에서 받은 응답으로 메시지 추가
+      if (data) {
+        setMessages(prev => [...prev, data]);
+        scrollToBottom();
+      }
+      
       setNewMessage('');
     } catch (err) {
       console.error('Error sending message:', err);
@@ -162,15 +180,18 @@ export default function Chat() {
       const { error } = await supabase
         .from('messages')
         .delete()
-        .neq('id', '0'); // 모든 메시지 삭제
+        .not('id', 'is', null); // 모든 메시지 삭제
 
-      if (error) throw error;
+      if (error) {
+        console.error('Delete error:', error);
+        throw error;
+      }
       
       setMessages([]);
       setIsResetModalOpen(false);
     } catch (err) {
       console.error('Error resetting chat:', err);
-      setError('채팅 초기화에 실패했습니다.');
+      setError('채팅 초기화에 실패했습니다. ' + (err instanceof Error ? err.message : '알 수 없는 오류'));
     }
   };
 
