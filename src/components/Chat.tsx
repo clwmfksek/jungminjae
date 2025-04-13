@@ -83,17 +83,24 @@ export default function Chat() {
           table: 'messages',
           broadcast: { self: true } // 자신의 변경사항도 수신
         },
-        async (payload) => {
+        (payload: any) => {
           console.log('실시간 업데이트:', payload);
           
-          if (payload.eventType === 'INSERT') {
-            const newMessage = payload.new as Message;
-            setMessages(prev => [...prev, newMessage]);
-            scrollToBottom();
-          } else if (payload.eventType === 'DELETE') {
-            console.log('채팅 초기화됨');
-            setMessages([]); // 모든 메시지 삭제
-            setError(null); // 에러 메시지 초기화
+          switch (payload.eventType) {
+            case 'INSERT': {
+              if (payload.new && typeof payload.new === 'object') {
+                const newMessage = payload.new as Message;
+                setMessages(prev => [...prev, newMessage]);
+                scrollToBottom();
+              }
+              break;
+            }
+            case 'DELETE': {
+              console.log('채팅 초기화됨');
+              setMessages([]); // 모든 메시지 삭제
+              setError(null); // 에러 메시지 초기화
+              break;
+            }
           }
         }
       )
