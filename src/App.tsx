@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 import { supabase, CounterRecord } from "./lib/supabase";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
 interface PersonCount {
   name: string;
@@ -26,21 +27,70 @@ function App() {
     type: 'circle' | 'square';
   }>>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+    console.log('Supabase Key exists:', !!import.meta.env.VITE_SUPABASE_ANON_KEY);
+    
     fetchCounts();
+
+    // 실시간 구독 설정
+    const channel = supabase
+      .channel('counter-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'counters'
+        },
+        (payload) => {
+          console.log('실시간 업데이트:', payload);
+          if (payload.eventType === 'UPDATE') {
+            const updatedRecord = payload.new as CounterRecord;
+            setPeople((currentPeople) =>
+              currentPeople.map((person) =>
+                person.name === updatedRecord.name
+                  ? { ...person, count: updatedRecord.count }
+                  : person
+              )
+            );
+
+            // 모든 카운터가 0이면 폭죽 애니메이션 실행
+            if (Object.values(payload.new).every(record => 
+              typeof record === 'number' ? record === 0 : true
+            )) {
+              createConfetti();
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      channel.unsubscribe();
+    };
   }, []);
 
   const fetchCounts = async () => {
     try {
+      console.log('Fetching counts...');
       const { data, error } = await supabase
         .from('counters')
         .select('*')
         .order('name');
 
       if (error) {
+        console.error('Supabase error:', error);
+        setError(error.message);
         throw error;
       }
+
+      console.log('Fetched data:', data);
 
       if (data) {
         const counts = data.map((record: CounterRecord) => ({
@@ -49,21 +99,25 @@ function App() {
         }));
         
         if (counts.length === 0) {
+          console.log('Creating initial data...');
           // 초기 데이터 생성
-          await Promise.all(
+          const insertResults = await Promise.all(
             initialPeople.map(person =>
               supabase
                 .from('counters')
                 .insert({ name: person.name, count: 0 })
             )
           );
+          console.log('Insert results:', insertResults);
           setPeople(initialPeople);
         } else {
+          console.log('Setting existing data:', counts);
           setPeople(counts);
         }
       }
     } catch (error) {
       console.error('Error fetching counts:', error);
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
     } finally {
       setLoading(false);
     }
@@ -103,44 +157,46 @@ function App() {
     try {
       const person = people[index];
       const newCount = person.count + 1;
+      console.log('Incrementing count for:', person.name, 'to:', newCount);
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('counters')
         .update({ count: newCount, updated_at: new Date().toISOString() })
-        .eq('name', person.name);
+        .eq('name', person.name)
+        .select();
 
       if (error) {
+        console.error('Update error:', error);
+        setError(error.message);
         throw error;
       }
 
-      setPeople(currentPeople => {
-        const newPeople = [...currentPeople];
-        newPeople[index] = {
-          ...newPeople[index],
-          count: newCount,
-        };
-        return newPeople;
-      });
+      console.log('Update result:', data);
     } catch (error) {
       console.error('Error incrementing count:', error);
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
     }
   };
 
   const resetCount = async () => {
     try {
-      const { error } = await supabase
+      console.log('Resetting all counts...');
+      const { data, error } = await supabase
         .from('counters')
         .update({ count: 0, updated_at: new Date().toISOString() })
-        .in('name', people.map(p => p.name));
+        .in('name', people.map(p => p.name))
+        .select();
 
       if (error) {
+        console.error('Reset error:', error);
+        setError(error.message);
         throw error;
       }
 
-      setPeople(people.map(person => ({ ...person, count: 0 })));
-      createConfetti();
+      console.log('Reset result:', data);
     } catch (error) {
       console.error('Error resetting counts:', error);
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
     }
   };
 
@@ -181,6 +237,17 @@ function App() {
         })}
       </div>
       <h1>과제 날먹 카운터</h1>
+      {error && (
+        <div style={{ 
+          color: 'red', 
+          margin: '10px', 
+          padding: '10px', 
+          border: '1px solid red',
+          borderRadius: '4px'
+        }}>
+          에러: {error}
+        </div>
+      )}
       <div className="card">
         {people.map((person, index) => (
           <div key={person.name}>
