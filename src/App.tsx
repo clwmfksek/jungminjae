@@ -46,28 +46,39 @@ function App() {
           table: 'counters'
         },
         (payload) => {
-          console.log('실시간 업데이트:', payload);
+          console.log('실시간 업데이트 수신:', payload);
           if (payload.eventType === 'UPDATE') {
             const updatedRecord = payload.new as CounterRecord;
-            setPeople((currentPeople) =>
-              currentPeople.map((person) =>
-                person.name === updatedRecord.name
-                  ? { ...person, count: updatedRecord.count }
-                  : person
-              )
-            );
+            console.log('업데이트할 레코드:', updatedRecord);
+            console.log('현재 상태:', people);
+            
+            setPeople(currentPeople => {
+              const newPeople = currentPeople.map(person => {
+                if (person.name === updatedRecord.name) {
+                  console.log(`${person.name}의 카운트를 ${updatedRecord.count}로 업데이트`);
+                  return { ...person, count: updatedRecord.count };
+                }
+                return person;
+              });
+              console.log('업데이트된 상태:', newPeople);
+              return newPeople;
+            });
 
-            // 모든 카운터가 0이면 폭죽 애니메이션 실행
-            if (Object.values(payload.new).every(record => 
-              typeof record === 'number' ? record === 0 : true
-            )) {
+            // 모든 카운터가 0인지 확인
+            const allZero = Object.values(payload.new).every(value => 
+              typeof value === 'number' ? value === 0 : true
+            );
+            console.log('모든 카운터가 0인가?', allZero);
+            
+            if (allZero) {
+              console.log('폭죽 애니메이션 실행');
               createConfetti();
             }
           }
         }
       )
       .subscribe((status) => {
-        console.log('Subscription status:', status);
+        console.log('구독 상태:', status);
       });
 
     // 컴포넌트 언마운트 시 구독 해제
@@ -157,45 +168,58 @@ function App() {
     try {
       const person = people[index];
       const newCount = person.count + 1;
-      console.log('Incrementing count for:', person.name, 'to:', newCount);
+      console.log('카운트 증가 요청:', person.name, 'to:', newCount);
 
       const { data, error } = await supabase
         .from('counters')
-        .update({ count: newCount, updated_at: new Date().toISOString() })
+        .update({ count: newCount })
         .eq('name', person.name)
         .select();
 
       if (error) {
-        console.error('Update error:', error);
+        console.error('업데이트 에러:', error);
         setError(error.message);
         throw error;
       }
 
-      console.log('Update result:', data);
+      console.log('업데이트 결과:', data);
+      
+      // 즉시 로컬 상태 업데이트
+      setPeople(currentPeople => 
+        currentPeople.map(p => 
+          p.name === person.name ? { ...p, count: newCount } : p
+        )
+      );
     } catch (error) {
-      console.error('Error incrementing count:', error);
+      console.error('카운트 증가 에러:', error);
       setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
     }
   };
 
   const resetCount = async () => {
     try {
-      console.log('Resetting all counts...');
+      console.log('전체 초기화 요청...');
       const { data, error } = await supabase
         .from('counters')
-        .update({ count: 0, updated_at: new Date().toISOString() })
+        .update({ count: 0 })
         .in('name', people.map(p => p.name))
         .select();
 
       if (error) {
-        console.error('Reset error:', error);
+        console.error('초기화 에러:', error);
         setError(error.message);
         throw error;
       }
 
-      console.log('Reset result:', data);
+      console.log('초기화 결과:', data);
+      
+      // 즉시 로컬 상태 업데이트
+      setPeople(currentPeople => 
+        currentPeople.map(p => ({ ...p, count: 0 }))
+      );
+      createConfetti();
     } catch (error) {
-      console.error('Error resetting counts:', error);
+      console.error('초기화 에러:', error);
       setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
     }
   };
