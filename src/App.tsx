@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 import { supabase, CounterRecord } from "./lib/supabase";
 import { RealtimeChannel } from "@supabase/supabase-js";
@@ -29,7 +29,27 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const setupRealtimeSubscription = async () => {
+  // 실시간 업데이트 처리 함수를 메모이제이션
+  const handleRealtimeUpdate = useCallback((payload: any) => {
+    const updatedRecord = payload.new as CounterRecord;
+    
+    setPeople(currentPeople => {
+      const newPeople = currentPeople.map(person =>
+        person.name === updatedRecord.name
+          ? { ...person, count: updatedRecord.count }
+          : person
+      );
+
+      // 모든 카운터가 0인지 확인
+      if (updatedRecord.count === 0 && newPeople.every(p => p.count === 0)) {
+        setTimeout(() => createConfetti(), 0);
+      }
+
+      return newPeople;
+    });
+  }, []);
+
+  const setupRealtimeSubscription = useCallback(async () => {
     const channel = supabase.channel('db-changes', {
       config: {
         broadcast: { self: true },
@@ -45,30 +65,12 @@ function App() {
           schema: 'public',
           table: 'counters',
         },
-        (payload) => {
-          const updatedRecord = payload.new as CounterRecord;
-          
-          setPeople(currentPeople => {
-            const newPeople = currentPeople.map(person =>
-              person.name === updatedRecord.name
-                ? { ...person, count: updatedRecord.count }
-                : person
-            );
-
-            // 모든 카운터가 0인지 확인
-            const allZero = newPeople.every(p => p.count === 0);
-            if (allZero) {
-              createConfetti();
-            }
-
-            return newPeople;
-          });
-        }
+        handleRealtimeUpdate
       )
       .subscribe();
 
     return channel;
-  };
+  }, [handleRealtimeUpdate]);
 
   useEffect(() => {
     let channel: RealtimeChannel;
@@ -76,10 +78,14 @@ function App() {
     const initialize = async () => {
       try {
         setLoading(true);
-        // 먼저 초기 데이터를 가져옵니다
-        await fetchCounts();
-        // 그 다음 실시간 구독을 설정합니다
-        channel = await setupRealtimeSubscription();
+        
+        // 병렬로 초기 데이터 로드와 실시간 구독 설정
+        const [_, subscriptionChannel] = await Promise.all([
+          fetchCounts(),
+          setupRealtimeSubscription()
+        ]);
+        
+        channel = subscriptionChannel;
       } catch (error) {
         setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
       } finally {
@@ -94,7 +100,61 @@ function App() {
         channel.unsubscribe();
       }
     };
-  }, []);
+  }, [setupRealtimeSubscription]);
+
+  const incrementCount = async (index: number) => {
+    try {
+      const person = people[index];
+      const newCount = person.count + 1;
+
+      // 낙관적 업데이트
+      setPeople(currentPeople => 
+        currentPeople.map((p, i) => 
+          i === index ? { ...p, count: newCount } : p
+        )
+      );
+
+      const { error } = await supabase
+        .from('counters')
+        .update({ count: newCount })
+        .eq('name', person.name);
+
+      if (error) {
+        // 실패 시 롤백
+        setPeople(currentPeople => 
+          currentPeople.map((p, i) => 
+            i === index ? { ...p, count: person.count } : p
+          )
+        );
+        setError(error.message);
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
+    }
+  };
+
+  const resetCount = async () => {
+    try {
+      // 낙관적 업데이트
+      setPeople(currentPeople => 
+        currentPeople.map(p => ({ ...p, count: 0 }))
+      );
+      createConfetti();
+
+      const { error } = await supabase
+        .from('counters')
+        .update({ count: 0 })
+        .in('name', people.map(p => p.name));
+
+      if (error) {
+        // 실패 시 롤백
+        setPeople(people);
+        setError(error.message);
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
+    }
+  };
 
   const fetchCounts = async () => {
     try {
@@ -110,20 +170,19 @@ function App() {
 
       if (data) {
         if (data.length === 0) {
-          const promises = initialPeople.map(person =>
-            supabase
-              .from('counters')
-              .insert({ name: person.name, count: 0 })
+          await Promise.all(
+            initialPeople.map(person =>
+              supabase
+                .from('counters')
+                .insert({ name: person.name, count: 0 })
+            )
           );
-
-          await Promise.all(promises);
           setPeople(initialPeople);
         } else {
-          const counts = data.map((record: CounterRecord) => ({
+          setPeople(data.map((record: CounterRecord) => ({
             name: record.name,
             count: record.count
-          }));
-          setPeople(counts);
+          })));
         }
       }
     } catch (error) {
@@ -160,41 +219,6 @@ function App() {
     
     setConfetti(newConfetti);
     setTimeout(() => setConfetti([]), 800);
-  };
-
-  const incrementCount = async (index: number) => {
-    try {
-      const person = people[index];
-      const newCount = person.count + 1;
-
-      const { error } = await supabase
-        .from('counters')
-        .update({ count: newCount })
-        .eq('name', person.name);
-
-      if (error) {
-        setError(error.message);
-        throw error;
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
-    }
-  };
-
-  const resetCount = async () => {
-    try {
-      const { error } = await supabase
-        .from('counters')
-        .update({ count: 0 })
-        .in('name', people.map(p => p.name));
-
-      if (error) {
-        setError(error.message);
-        throw error;
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
-    }
   };
 
   if (loading) {
