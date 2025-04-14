@@ -85,10 +85,10 @@ export default function Chat() {
     }
   };
 
-  // 실시간 메시지 구독
+  // 실시간 메시지 및 초기화 이벤트 구독
   useEffect(() => {
     const channel = supabase
-      .channel('messages-channel')
+      .channel('chat-channel')
       .on(
         'postgres_changes',
         {
@@ -112,6 +112,18 @@ export default function Chat() {
           if (shouldScrollToBottom) {
             setTimeout(scrollToBottom, 100);
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages'
+        },
+        () => {
+          // 메시지 삭제 이벤트 발생 시 모든 메시지 초기화
+          setMessages([]);
         }
       )
       .subscribe((status) => {
@@ -234,13 +246,6 @@ export default function Chat() {
         console.error('Delete error:', error);
         throw error;
       }
-      
-      // 초기화 이벤트 브로드캐스트
-      await supabase.channel('reset-events').send({
-        type: 'broadcast',
-        event: 'chat-reset',
-        payload: {}
-      });
       
       setMessages([]);
       setIsResetModalOpen(false);
