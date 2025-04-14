@@ -87,8 +87,9 @@ export default function Chat() {
 
   // 실시간 메시지 및 초기화 이벤트 구독
   useEffect(() => {
-    const channel = supabase
-      .channel('chat-channel')
+    // 메시지 변경사항을 구독하는 채널
+    const messageChannel = supabase
+      .channel('messages-channel')
       .on(
         'postgres_changes',
         {
@@ -114,18 +115,6 @@ export default function Chat() {
           }
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'messages'
-        },
-        () => {
-          // 메시지 삭제 이벤트 발생 시 모든 메시지 초기화
-          setMessages([]);
-        }
-      )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('실시간 연결 성공');
@@ -136,13 +125,27 @@ export default function Chat() {
           console.log('연결 끊김, 재연결 시도...');
           setConnectionStatus('연결 끊김');
           setTimeout(() => {
-            channel.subscribe();
+            messageChannel.subscribe();
           }, 3000);
         }
       });
 
+    // 초기화 이벤트를 구독하는 채널
+    const resetChannel = supabase
+      .channel('reset-channel')
+      .on(
+        'broadcast',
+        { event: 'chat-reset' },
+        () => {
+          console.log('채팅 초기화 이벤트 수신');
+          setMessages([]);
+        }
+      )
+      .subscribe();
+
     return () => {
-      channel.unsubscribe();
+      messageChannel.unsubscribe();
+      resetChannel.unsubscribe();
     };
   }, [scrollToBottom, shouldScrollToBottom]);
 
@@ -237,17 +240,26 @@ export default function Chat() {
     }
 
     try {
+      // 먼저 브로드캐스트로 초기화 이벤트 전송
+      await supabase
+        .channel('reset-channel')
+        .send({
+          type: 'broadcast',
+          event: 'chat-reset',
+          payload: {}
+        });
+
+      // 그 다음 실제 데이터베이스에서 메시지 삭제
       const { error } = await supabase
         .from('messages')
         .delete()
-        .not('id', 'is', null); // 모든 메시지 삭제
+        .not('id', 'is', null);
 
       if (error) {
         console.error('Delete error:', error);
         throw error;
       }
       
-      setMessages([]);
       setIsResetModalOpen(false);
     } catch (err) {
       console.error('Error resetting chat:', err);
