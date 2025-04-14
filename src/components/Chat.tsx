@@ -30,10 +30,14 @@ export default function Chat() {
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
     if (shouldScrollToBottom && chatMessagesRef.current) {
-      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+      chatMessagesRef.current.scrollTo({
+        top: chatMessagesRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, [shouldScrollToBottom]);
 
@@ -42,8 +46,43 @@ export default function Chat() {
       const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
       const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
       setShouldScrollToBottom(isNearBottom);
+
+      // 스크롤이 맨 위에 도달했을 때 새로운 메시지를 로드
+      if (scrollTop === 0 && !isLoading && hasMore) {
+        fetchMessages();
+      }
     }
-  }, []);
+  }, [isLoading, hasMore]);
+
+  const fetchMessages = useCallback(async () => {
+    if (isLoading || !hasMore) return;
+    
+    setIsLoading(true);
+    try {
+      const from = messages.length;
+      const to = from + MESSAGES_PER_PAGE - 1;
+      
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .range(from, to);
+        
+      if (error) throw error;
+      
+      if (data) {
+        setMessages(prev => [...prev, ...data].sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        ));
+        setHasMore(data.length === MESSAGES_PER_PAGE);
+      }
+    } catch (error) {
+      console.error('메시지 로딩 중 오류:', error);
+      setError('메시지를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [messages.length, isLoading, hasMore]);
 
   useEffect(() => {
     const chatMessages = chatMessagesRef.current;
@@ -53,50 +92,8 @@ export default function Chat() {
     }
   }, [handleScroll]);
 
-  const fetchMessages = useCallback(async (isInitial = false) => {
-    try {
-      setIsLoading(true);
-      const from = isInitial ? 0 : messages.length;
-      const to = from + MESSAGES_PER_PAGE - 1;
-
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: true })
-        .range(from, to);
-
-      if (error) throw error;
-
-      const newMessages = data || [];
-      setHasMore(newMessages.length === MESSAGES_PER_PAGE);
-      
-      setMessages(prev => {
-        if (isInitial) return newMessages;
-        const uniqueMessages = newMessages.filter(
-          newMsg => !prev.some(prevMsg => prevMsg.id === newMsg.id)
-        );
-        return [...prev, ...uniqueMessages];
-      });
-
-      // 초기 로딩 시 항상 스크롤 아래로
-      if (isInitial) {
-        setTimeout(scrollToBottom, 100);
-      }
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-      setError('메시지를 불러오는데 실패했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [messages.length, scrollToBottom]);
-
-  // 컴포넌트 마운트 시와 메시지 업데이트 시 스크롤 최하단으로
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  useEffect(() => {
-    fetchMessages(true);
+    fetchMessages();
 
     const channel = supabase
       .channel('messages-channel')
@@ -112,10 +109,13 @@ export default function Chat() {
           setMessages(prev => {
             const isDuplicate = prev.some(msg => msg.id === newMessage.id);
             if (isDuplicate) return prev;
-            const updatedMessages = [...prev, newMessage];
-            return updatedMessages.slice(-100);
+            return [...prev, newMessage].sort((a, b) => 
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
           });
-          scrollToBottom(); // 새 메시지 수신 시 항상 스크롤 아래로
+          if (shouldScrollToBottom) {
+            scrollToBottom();
+          }
         }
       )
       .on(
@@ -156,18 +156,20 @@ export default function Chat() {
           fetchMessages();
         }
       },
-      { threshold: 0.1 }
+      { 
+        threshold: 0.5,
+        rootMargin: '100px'
+      }
     );
 
-    if (loadingRef.current) {
-      observer.observe(loadingRef.current);
+    const currentRef = loadingRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
     }
 
-    observerRef.current = observer;
-
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
+      if (currentRef) {
+        observer.unobserve(currentRef);
       }
     };
   }, [fetchMessages, hasMore, isLoading]);
@@ -250,7 +252,7 @@ export default function Chat() {
   }, [location]);
 
   return (
-    <div className="chat-container">
+    <div className="chat-container" ref={chatContainerRef}>
       <div className="chat-header">
         <div className="chat-header-content">
           <h2>실시간 채팅</h2>
