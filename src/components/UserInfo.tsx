@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './UserInfo.css';
 
 interface UserInfoProps {
@@ -25,6 +25,7 @@ interface SystemInfo {
   connection: string;
   deviceType: string;
   orientation: string;
+  visitTime: string;
 }
 
 export default function UserInfo({ className = '' }: UserInfoProps) {
@@ -40,8 +41,31 @@ export default function UserInfo({ className = '' }: UserInfoProps) {
     connection: '',
     deviceType: '',
     orientation: '',
+    visitTime: '0분 0초'
   });
   const [isExpanded, setIsExpanded] = useState(false);
+  const visitStartTime = useRef(Date.now());
+
+  useEffect(() => {
+    // 방문 시간 업데이트
+    const updateVisitTime = () => {
+      const now = Date.now();
+      const diff = now - visitStartTime.current;
+      const minutes = Math.floor(diff / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      
+      setSystemInfo(prev => ({
+        ...prev,
+        visitTime: `${minutes}분 ${seconds}초`
+      }));
+    };
+
+    const timer = setInterval(updateVisitTime, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     // 시스템 정보 설정
@@ -130,6 +154,7 @@ export default function UserInfo({ className = '' }: UserInfoProps) {
       connection: getConnectionInfo(),
       deviceType: getDeviceType(),
       orientation: getOrientation(),
+      visitTime: '0분 0초'
     });
 
     // IP 정보 가져오기
@@ -174,9 +199,18 @@ export default function UserInfo({ className = '' }: UserInfoProps) {
       <div className="user-info-summary">
         <span className="user-info-ip">{ipInfo?.ip || '로딩 중...'}</span>
         <span className="user-info-browser">{systemInfo.browser}</span>
+        <span className="user-info-time">{systemInfo.visitTime}</span>
       </div>
       {isExpanded && (
         <div className="user-info-details">
+          <div className="info-section">
+            <div className="info-section-title">방문 정보</div>
+            <div className="info-row">
+              <span className="info-label">체류 시간:</span>
+              <span className="info-value highlight">{systemInfo.visitTime}</span>
+            </div>
+          </div>
+
           <div className="info-section">
             <div className="info-section-title">네트워크 정보</div>
             <div className="info-row">

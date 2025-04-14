@@ -86,6 +86,22 @@
   border: 1px solid var(--border-color);
 }
 
+.user-info-time {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-family: monospace;
+  border: 1px solid var(--border-color);
+}
+
+.info-value.highlight {
+  color: var(--accent-color);
+  font-weight: 500;
+  background-color: rgba(var(--accent-color-rgb), 0.1);
+}
+
 .expanded {
   background: var(--bg-primary);
 } 
