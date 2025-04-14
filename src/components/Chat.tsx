@@ -54,37 +54,38 @@ export default function Chat() {
     }
   }, [handleScroll]);
 
-  const fetchMessages = useCallback(async () => {
-    if (isLoading || !hasMore) return;
-    
-    setIsLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !userName.trim()) return;
+
     try {
-      const from = messages.length;
-      const to = from + MESSAGES_PER_PAGE - 1;
-      
       const { data, error } = await supabase
         .from('messages')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(from, to);
-        
+        .insert([
+          {
+            content: newMessage.trim(),
+            user_name: userName.trim(),
+          },
+        ])
+        .select()
+        .single();
+
       if (error) throw error;
       
       if (data) {
-        const typedData = data as Message[];
-        setMessages(prev => [...prev, ...typedData].sort((a, b) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        ));
-        setHasMore(data.length === MESSAGES_PER_PAGE);
+        const newMsg = data as Message;
+        setMessages(prev => [...prev, newMsg]);
+        setNewMessage('');
+        setShouldScrollToBottom(true);
+        setTimeout(scrollToBottom, 100);
       }
-    } catch (error) {
-      console.error('메시지 로딩 중 오류:', error);
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      console.error('Error sending message:', err);
+      setError('메시지 전송에 실패했습니다.');
     }
-  }, [messages.length, isLoading, hasMore]);
+  };
 
-  // 새 메시지 수신 시 처리
+  // 실시간 메시지 구독
   useEffect(() => {
     const channel = supabase
       .channel('messages-channel')
@@ -97,81 +98,15 @@ export default function Chat() {
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          setMessages(prev => [...prev, newMessage].sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          ));
-          if (shouldScrollToBottom) {
-            setTimeout(scrollToBottom, 100);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [shouldScrollToBottom, scrollToBottom]);
-
-  // 스크롤 이벤트 핸들러 추가
-  useEffect(() => {
-    const chatMessages = chatMessagesRef.current;
-    if (!chatMessages) return;
-
-    let isScrolling: NodeJS.Timeout;
-    const handleScrollThrottled = () => {
-      clearTimeout(isScrolling);
-      isScrolling = setTimeout(() => {
-        const { scrollTop, scrollHeight, clientHeight } = chatMessages;
-        const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
-        setShouldScrollToBottom(isNearBottom);
-
-        // 스크롤이 맨 위에 도달했을 때만 새로운 메시지를 로드
-        if (scrollTop === 0 && !isLoading && hasMore) {
-          fetchMessages();
-        }
-      }, 150);
-    };
-
-    chatMessages.addEventListener('scroll', handleScrollThrottled);
-    return () => {
-      chatMessages.removeEventListener('scroll', handleScrollThrottled);
-      clearTimeout(isScrolling);
-    };
-  }, [fetchMessages, isLoading, hasMore]);
-
-  // 컴포넌트 마운트 시와 메시지 업데이트 시 스크롤 최하단으로
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  useEffect(() => {
-    fetchMessages();
-
-    const channel = supabase
-      .channel('messages-channel', {
-        config: {
-          broadcast: { self: true },
-          presence: { key: 'chat-app' }
-        }
-      })
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages'
-        },
-        (payload) => {
-          const newMessage = payload.new as Message;
           setMessages(prev => {
-            const isDuplicate = prev.some(msg => msg.id === newMessage.id);
-            if (isDuplicate) return prev;
-            
-            const updatedMessages = [...prev, newMessage].sort((a, b) => 
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            const isDuplicate = prev.some(msg => 
+              msg.id === newMessage.id || 
+              (msg.content === newMessage.content && 
+               msg.user_name === newMessage.user_name && 
+               msg.created_at === newMessage.created_at)
             );
-            
-            return updatedMessages.slice(-100); // 최대 100개 메시지만 유지
+            if (isDuplicate) return prev;
+            return [...prev, newMessage];
           });
           
           if (shouldScrollToBottom) {
@@ -179,22 +114,12 @@ export default function Chat() {
           }
         }
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'messages',
-        },
-        () => {
-          setMessages([]);
-          setShouldScrollToBottom(true);
-        }
-      )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('실시간 연결 성공');
           setConnectionStatus('연결됨');
+          // 구독 성공 후 초기 메시지 로드
+          fetchInitialMessages();
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           console.log('연결 끊김, 재연결 시도...');
           setConnectionStatus('연결 끊김');
@@ -207,14 +132,72 @@ export default function Chat() {
     return () => {
       channel.unsubscribe();
     };
-  }, [fetchMessages, scrollToBottom, shouldScrollToBottom]);
+  }, [scrollToBottom, shouldScrollToBottom]);
 
+  // 컴포넌트 마운트 시와 메시지 업데이트 시 스크롤 최하단으로
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom]);
+
+  // 초기 메시지 로드 함수
+  const fetchInitialMessages = async () => {
+    if (isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(MESSAGES_PER_PAGE);
+        
+      if (error) throw error;
+      
+      if (data) {
+        setMessages(data);
+        setHasMore(data.length === MESSAGES_PER_PAGE);
+      }
+    } catch (error) {
+      console.error('메시지 로딩 중 오류:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 이전 메시지 로드
+  const fetchMoreMessages = async () => {
+    if (isLoading || !hasMore) return;
+    
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .range(messages.length, messages.length + MESSAGES_PER_PAGE - 1);
+        
+      if (error) throw error;
+      
+      if (data) {
+        setMessages(prev => [...prev, ...data]);
+        setHasMore(data.length === MESSAGES_PER_PAGE);
+      }
+    } catch (error) {
+      console.error('메시지 로딩 중 오류:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Intersection Observer 설정
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
         if (first.isIntersecting && hasMore && !isLoading) {
-          fetchMessages();
+          fetchMoreMessages();
         }
       },
       { 
@@ -233,38 +216,7 @@ export default function Chat() {
         observer.unobserve(currentRef);
       }
     };
-  }, [fetchMessages, hasMore, isLoading]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !userName.trim()) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .insert([
-          {
-            content: newMessage.trim(),
-            user_name: userName.trim(),
-          },
-        ])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setMessages(prev => [...prev, data]);
-        setShouldScrollToBottom(true);
-        scrollToBottom();
-      }
-      
-      setNewMessage('');
-    } catch (err) {
-      console.error('Error sending message:', err);
-      setError('메시지 전송에 실패했습니다.');
-    }
-  };
+  }, [hasMore, isLoading]);
 
   const handleChatReset = async (password: string) => {
     if (password !== RESET_PASSWORD) {
@@ -311,14 +263,6 @@ export default function Chat() {
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
     }
   }, [location]);
-
-  // 컴포넌트 언마운트 시
-  useEffect(() => {
-    const channelInstance = supabase.channel('messages-channel');
-    return () => {
-      channelInstance.unsubscribe();
-    };
-  }, []);
 
   return (
     <div className="chat-container" ref={chatContainerRef}>
