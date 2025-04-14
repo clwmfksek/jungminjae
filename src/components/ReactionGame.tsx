@@ -8,6 +8,12 @@ interface GameState {
   endTime: number;
 }
 
+interface Firework {
+  id: number;
+  x: string | number;
+  y: string | number;
+}
+
 const INITIAL_STATE: GameState = {
   state: 'waiting',
   message: '시작하려면 클릭하세요',
@@ -32,6 +38,30 @@ const ReactionGame = () => {
     const savedBest = localStorage.getItem('reactionGameBest');
     return savedBest ? Number(savedBest) : null;
   });
+  const [fireworks, setFireworks] = useState<Firework[]>([]);
+
+  // 폭죽 생성 함수
+  const createFireworks = useCallback((isEnterKey: boolean) => {
+    if (!isEnterKey) return;
+
+    const gameBox = document.querySelector('.game-box');
+    if (!gameBox) return;
+
+    const rect = gameBox.getBoundingClientRect();
+    const newFireworks: Firework[] = [];
+    const numFireworks = 12;
+
+    for (let i = 0; i < numFireworks; i++) {
+      newFireworks.push({
+        id: Date.now() + i,
+        x: '50%',  // CSS의 50%를 사용하여 중앙에 위치
+        y: '50%',  // CSS의 50%를 사용하여 중앙에 위치
+      });
+    }
+
+    setFireworks(newFireworks);
+    setTimeout(() => setFireworks([]), 800);
+  }, []);
 
   // 게임 시작 핸들러
   const startGame = useCallback(() => {
@@ -57,7 +87,7 @@ const ReactionGame = () => {
   }, [gameState.state]);
 
   // 게임 종료 핸들러
-  const endGame = useCallback(() => {
+  const endGame = useCallback((isEnterKey: boolean = false) => {
     if (gameState.state === 'now') {
       const currentTime = Date.now();
       const reactionTime = currentTime - gameState.startTime;
@@ -78,6 +108,7 @@ const ReactionGame = () => {
       if (!bestRecord || reactionTime < bestRecord) {
         setBestRecord(reactionTime);
         localStorage.setItem('reactionGameBest', reactionTime.toString());
+        createFireworks(isEnterKey);
       }
     } else if (gameState.state === 'ready') {
       setGameState({
@@ -85,7 +116,23 @@ const ReactionGame = () => {
         message: '너무 일찍 클릭했습니다! 다시 시도하려면 클릭하세요.',
       });
     }
-  }, [gameState.state, gameState.startTime, bestRecord]);
+  }, [gameState.state, gameState.startTime, bestRecord, createFireworks]);
+
+  // 키보드 이벤트 핸들러
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        if (gameState.state === 'waiting' || gameState.state === 'ready') {
+          startGame();
+        } else {
+          endGame(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [gameState.state, startGame, endGame]);
 
   // 게임 리셋 핸들러
   const resetGame = useCallback(() => {
@@ -108,7 +155,7 @@ const ReactionGame = () => {
     if (gameState.state === 'waiting' || gameState.state === 'ready') {
       startGame();
     } else {
-      endGame();
+      endGame(false);
     }
   }, [gameState.state, startGame, endGame]);
 
@@ -136,9 +183,21 @@ const ReactionGame = () => {
 
       <div 
         className="game-box"
-        style={{ backgroundColor: COLORS[gameState.state] }}
+        style={{ backgroundColor: COLORS[gameState.state], position: 'relative' }}
         onClick={handleClick}
       >
+        <div className="firework-container">
+          {fireworks.map(firework => (
+            <div
+              key={firework.id}
+              className="firework"
+              style={{
+                left: firework.x,
+                top: firework.y
+              }}
+            />
+          ))}
+        </div>
         <p className="game-message">{gameState.message}</p>
       </div>
 
