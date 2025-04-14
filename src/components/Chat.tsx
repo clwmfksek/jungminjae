@@ -118,10 +118,13 @@ export default function Chat() {
     if (!chatMessages) return;
 
     let isScrolling: NodeJS.Timeout;
-    const handleScroll = () => {
+    const handleScrollThrottled = () => {
       clearTimeout(isScrolling);
       isScrolling = setTimeout(() => {
-        const { scrollTop } = chatMessages;
+        const { scrollTop, scrollHeight, clientHeight } = chatMessages;
+        const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
+        setShouldScrollToBottom(isNearBottom);
+
         // 스크롤이 맨 위에 도달했을 때만 새로운 메시지를 로드
         if (scrollTop === 0 && !isLoading && hasMore) {
           fetchMessages();
@@ -129,9 +132,9 @@ export default function Chat() {
       }, 150);
     };
 
-    chatMessages.addEventListener('scroll', handleScroll);
+    chatMessages.addEventListener('scroll', handleScrollThrottled);
     return () => {
-      chatMessages.removeEventListener('scroll', handleScroll);
+      chatMessages.removeEventListener('scroll', handleScrollThrottled);
       clearTimeout(isScrolling);
     };
   }, [fetchMessages, isLoading, hasMore]);
@@ -163,10 +166,17 @@ export default function Chat() {
           setMessages(prev => {
             const isDuplicate = prev.some(msg => msg.id === newMessage.id);
             if (isDuplicate) return prev;
-            const updatedMessages = [...prev, newMessage];
-            return updatedMessages.slice(-100);
+            
+            const updatedMessages = [...prev, newMessage].sort((a, b) => 
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            
+            return updatedMessages.slice(-100); // 최대 100개 메시지만 유지
           });
-          scrollToBottom(); // 새 메시지 수신 시 항상 스크롤 아래로
+          
+          if (shouldScrollToBottom) {
+            setTimeout(scrollToBottom, 100);
+          }
         }
       )
       .on(
@@ -187,6 +197,7 @@ export default function Chat() {
           setConnectionStatus('연결됨');
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           console.log('연결 끊김, 재연결 시도...');
+          setConnectionStatus('연결 끊김');
           setTimeout(() => {
             channel.subscribe();
           }, 3000);
