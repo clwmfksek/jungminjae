@@ -75,10 +75,9 @@ export default function Chat() {
         setHasMore(data.length === MESSAGES_PER_PAGE);
         // 메시지 로딩 완료 후 스크롤을 맨 아래로 이동
         setTimeout(() => {
-          chatContainerRef.current?.scrollTo({
-            top: chatContainerRef.current.scrollHeight,
-            behavior: 'smooth'
-          });
+          if (chatMessagesRef.current) {
+            chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+          }
         }, 100);
       }
     } catch (error) {
@@ -90,14 +89,14 @@ export default function Chat() {
 
   // 스크롤 이벤트 핸들러 추가
   useEffect(() => {
-    const chatContainer = chatContainerRef.current;
-    if (!chatContainer) return;
+    const chatMessages = chatMessagesRef.current;
+    if (!chatMessages) return;
 
     let isScrolling: NodeJS.Timeout;
     const handleScroll = () => {
       clearTimeout(isScrolling);
       isScrolling = setTimeout(() => {
-        const { scrollTop } = chatContainer;
+        const { scrollTop } = chatMessages;
         // 스크롤이 맨 위에 도달했을 때만 새로운 메시지를 로드
         if (scrollTop === 0 && !isLoading && hasMore) {
           fetchMessages();
@@ -105,9 +104,9 @@ export default function Chat() {
       }, 150);
     };
 
-    chatContainer.addEventListener('scroll', handleScroll);
+    chatMessages.addEventListener('scroll', handleScroll);
     return () => {
-      chatContainer.removeEventListener('scroll', handleScroll);
+      chatMessages.removeEventListener('scroll', handleScroll);
       clearTimeout(isScrolling);
     };
   }, [fetchMessages, isLoading, hasMore]);
