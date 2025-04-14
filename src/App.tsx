@@ -11,6 +11,7 @@ import Navigation from './components/Navigation';
 import ReactionGame from './components/ReactionGame';
 import { motion } from "framer-motion";
 import Counter from './components/Counter';
+import Login from './components/Login';
 
 // 테마 타입 정의
 type Theme = 'light' | 'dark';
@@ -285,6 +286,7 @@ function App() {
             } />
             <Route path="/chat" element={<Chat />} />
             <Route path="/game" element={<ReactionGame />} />
+            <Route path="/login" element={<Login />} />
           </Routes>
         </div>
         

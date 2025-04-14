@@ -52,6 +52,8 @@ export default function Chat() {
         
         const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
         const isNearBottom = scrollHeight - (scrollTop + clientHeight) < SCROLL_THRESHOLD;
+        
+        // 스크롤 위치에 따라 자동 스크롤 상태 업데이트
         setShouldScrollToBottom(isNearBottom);
       }, DEBOUNCE_DELAY),
     []
@@ -70,24 +72,6 @@ export default function Chat() {
       throw err;
     }
   }, []);
-
-  // 폼 제출 핸들러 최적화
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedMessage = newMessage.trim();
-    const trimmedUserName = userName.trim();
-    
-    if (!trimmedMessage || !trimmedUserName) return;
-
-    setNewMessage(''); // 즉시 입력창 초기화
-    
-    try {
-      await sendMessage(trimmedMessage, trimmedUserName);
-    } catch (err) {
-      setError('메시지 전송에 실패했습니다.');
-      setNewMessage(trimmedMessage); // 실패 시 메시지 복구
-    }
-  }, [newMessage, userName, sendMessage]);
 
   // 초기 메시지 로드 최적화
   const fetchInitialMessages = useCallback(async () => {
@@ -198,10 +182,6 @@ export default function Chat() {
               if (!messageCache.current.has(newMessage.id)) {
                 messageCache.current.set(newMessage.id, newMessage);
                 setMessages(prev => [...prev, newMessage]);
-                
-                if (shouldScrollToBottom) {
-                  setTimeout(scrollToBottom, 100);
-                }
               }
             }
           )
@@ -212,7 +192,6 @@ export default function Chat() {
               setConnectionStatus('연결됨');
             } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
               setConnectionStatus('연결 끊김');
-              // 재연결 로직
               setTimeout(() => {
                 if (isSubscribed && channelRef.current) {
                   channelRef.current.subscribe();
@@ -236,7 +215,14 @@ export default function Chat() {
         channelRef.current.unsubscribe();
       }
     };
-  }, [fetchInitialMessages, scrollToBottom, shouldScrollToBottom]);
+  }, [fetchInitialMessages]);
+
+  // 페이지 진입 시 스크롤 처리
+  useEffect(() => {
+    if (location.pathname === '/chat') {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [location.pathname, scrollToBottom]);
 
   // 스크롤 이벤트 리스너
   useEffect(() => {
@@ -294,6 +280,28 @@ export default function Chat() {
       </div>
     ));
   }, [messages]);
+
+  // 폼 제출 핸들러 최적화
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedMessage = newMessage.trim();
+    const trimmedUserName = userName.trim();
+    
+    if (!trimmedMessage || !trimmedUserName) return;
+
+    setNewMessage(''); // 즉시 입력창 초기화
+    
+    // 메시지 전송 시에만 스크롤 아래로 이동
+    setShouldScrollToBottom(true);
+    setTimeout(scrollToBottom, 100);
+    
+    try {
+      await sendMessage(trimmedMessage, trimmedUserName);
+    } catch (err) {
+      setError('메시지 전송에 실패했습니다.');
+      setNewMessage(trimmedMessage); // 실패 시 메시지 복구
+    }
+  }, [newMessage, userName, sendMessage, scrollToBottom]);
 
   return (
     <div className="chat-container">

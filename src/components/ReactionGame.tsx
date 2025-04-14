@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 import './ReactionGame.css';
 
 interface GameState {
@@ -6,12 +8,7 @@ interface GameState {
   message: string;
   startTime: number;
   endTime: number;
-}
-
-interface Firework {
-  id: number;
-  x: string | number;
-  y: string | number;
+  userId: string | null;
 }
 
 const INITIAL_STATE: GameState = {
@@ -19,6 +16,7 @@ const INITIAL_STATE: GameState = {
   message: '시작하려면 클릭하세요',
   startTime: 0,
   endTime: 0,
+  userId: null
 };
 
 const COLORS = {
@@ -28,7 +26,14 @@ const COLORS = {
   finished: 'var(--bg-secondary)',
 } as const;
 
+// 반응 속도 등급 기준 (ms)
+const REACTION_GRADES = {
+  FAST: 250,    // 250ms 이하: 빠름
+  NORMAL: 350,  // 350ms 이하: 보통
+} as const;
+
 const ReactionGame = () => {
+  const navigate = useNavigate();
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
   const [records, setRecords] = useState<number[]>(() => {
     const savedRecords = localStorage.getItem('reactionGameRecords');
@@ -38,30 +43,20 @@ const ReactionGame = () => {
     const savedBest = localStorage.getItem('reactionGameBest');
     return savedBest ? Number(savedBest) : null;
   });
-  const [fireworks, setFireworks] = useState<Firework[]>([]);
+  const [reactionClass, setReactionClass] = useState<string>('');
 
-  // 폭죽 생성 함수
-  const createFireworks = useCallback((isEnterKey: boolean) => {
-    if (!isEnterKey) return;
-
-    const gameBox = document.querySelector('.game-box');
-    if (!gameBox) return;
-
-    const rect = gameBox.getBoundingClientRect();
-    const newFireworks: Firework[] = [];
-    const numFireworks = 12;
-
-    for (let i = 0; i < numFireworks; i++) {
-      newFireworks.push({
-        id: Date.now() + i,
-        x: '50%',  // CSS의 50%를 사용하여 중앙에 위치
-        y: '50%',  // CSS의 50%를 사용하여 중앙에 위치
-      });
-    }
-
-    setFireworks(newFireworks);
-    setTimeout(() => setFireworks([]), 800);
-  }, []);
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/login');
+        return;
+      }
+      setGameState(prev => ({ ...prev, userId: session.user.id }));
+    };
+    
+    checkAuth();
+  }, [navigate]);
 
   // 게임 시작 핸들러
   const startGame = useCallback(() => {
@@ -86,8 +81,15 @@ const ReactionGame = () => {
     return () => clearTimeout(timeout);
   }, [gameState.state]);
 
+  // 반응 속도에 따른 클래스 결정
+  const getReactionClass = (reactionTime: number): string => {
+    if (reactionTime <= REACTION_GRADES.FAST) return 'fast';
+    if (reactionTime <= REACTION_GRADES.NORMAL) return 'normal';
+    return 'slow';
+  };
+
   // 게임 종료 핸들러
-  const endGame = useCallback((isEnterKey: boolean = false) => {
+  const endGame = useCallback(async () => {
     if (gameState.state === 'now') {
       const currentTime = Date.now();
       const reactionTime = currentTime - gameState.startTime;
@@ -99,6 +101,10 @@ const ReactionGame = () => {
         message: `반응 속도: ${reactionTime}ms`,
       }));
 
+      // 반응 속도에 따른 클래스 설정
+      const newClass = (!bestRecord || reactionTime < bestRecord) ? 'new-record' : getReactionClass(reactionTime);
+      setReactionClass(newClass);
+
       setRecords(prev => {
         const newRecords = [...prev, reactionTime];
         localStorage.setItem('reactionGameRecords', JSON.stringify(newRecords));
@@ -108,7 +114,21 @@ const ReactionGame = () => {
       if (!bestRecord || reactionTime < bestRecord) {
         setBestRecord(reactionTime);
         localStorage.setItem('reactionGameBest', reactionTime.toString());
-        createFireworks(isEnterKey);
+      }
+
+      // 2초 후 클래스 제거
+      setTimeout(() => setReactionClass(''), 2000);
+
+      if (gameState.userId) {
+        await supabase
+          .from('game_records')
+          .insert([
+            {
+              user_id: gameState.userId,
+              reaction_time: reactionTime,
+              is_high_score: !bestRecord || reactionTime < bestRecord
+            }
+          ]);
       }
     } else if (gameState.state === 'ready') {
       setGameState({
@@ -116,7 +136,7 @@ const ReactionGame = () => {
         message: '너무 일찍 클릭했습니다! 다시 시도하려면 클릭하세요.',
       });
     }
-  }, [gameState.state, gameState.startTime, bestRecord, createFireworks]);
+  }, [gameState.state, gameState.startTime, bestRecord, gameState.userId]);
 
   // 키보드 이벤트 핸들러
   useEffect(() => {
@@ -125,7 +145,7 @@ const ReactionGame = () => {
         if (gameState.state === 'waiting' || gameState.state === 'ready') {
           startGame();
         } else {
-          endGame(true);
+          endGame();
         }
       }
     };
@@ -137,6 +157,7 @@ const ReactionGame = () => {
   // 게임 리셋 핸들러
   const resetGame = useCallback(() => {
     setGameState(INITIAL_STATE);
+    setReactionClass('');
   }, []);
 
   // 통계 계산
@@ -155,7 +176,7 @@ const ReactionGame = () => {
     if (gameState.state === 'waiting' || gameState.state === 'ready') {
       startGame();
     } else {
-      endGame(false);
+      endGame();
     }
   }, [gameState.state, startGame, endGame]);
 
@@ -182,22 +203,10 @@ const ReactionGame = () => {
       </div>
 
       <div 
-        className="game-box"
-        style={{ backgroundColor: COLORS[gameState.state], position: 'relative' }}
+        className={`game-box ${reactionClass}`}
+        style={{ backgroundColor: COLORS[gameState.state] }}
         onClick={handleClick}
       >
-        <div className="firework-container">
-          {fireworks.map(firework => (
-            <div
-              key={firework.id}
-              className="firework"
-              style={{
-                left: firework.x,
-                top: firework.y
-              }}
-            />
-          ))}
-        </div>
         <p className="game-message">{gameState.message}</p>
       </div>
 
