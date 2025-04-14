@@ -12,7 +12,9 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
     "@tanstack/react-virtual": "^3.13.6",
+    "@types/lodash": "^4.17.16",
     "framer-motion": "^12.6.5",
+    "lodash": "^4.17.21",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.5.0"

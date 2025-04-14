@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import './UserInfo.css';
 
+// 상수 정의
+const RETRY_DELAY = 5000;
+const MAX_RETRIES = 3;
+const UPDATE_INTERVAL = 1000;
+
+// 타입 정의
 interface IpInfo {
   ip: string;
   country_name: string;
@@ -10,8 +16,78 @@ interface IpInfo {
   org: string;
 }
 
+interface SystemInfo {
+  browser: string;
+  os: string;
+  deviceType: string;
+  connection: string;
+  cores: number;
+  memory: string;
+  orientation: string;
+}
+
+// 유틸리티 함수
+const getBrowserInfo = (userAgent: string): string => {
+  const browsers = {
+    chrome: /chrome|chromium/i,
+    safari: /safari/i,
+    firefox: /firefox/i,
+    opera: /opera|opr/i,
+    edge: /edg/i,
+    ie: /msie|trident/i,
+  };
+
+  for (const [browser, regex] of Object.entries(browsers)) {
+    if (regex.test(userAgent)) {
+      return browser.charAt(0).toUpperCase() + browser.slice(1);
+    }
+  }
+  return 'Unknown';
+};
+
+const getOSInfo = (userAgent: string): string => {
+  const os = {
+    windows: /windows/i,
+    mac: /mac/i,
+    linux: /linux/i,
+    android: /android/i,
+    ios: /iphone|ipad|ipod/i,
+  };
+
+  for (const [name, regex] of Object.entries(os)) {
+    if (regex.test(userAgent)) {
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+  }
+  return 'Unknown';
+};
+
+const getDeviceType = (userAgent: string): string => {
+  const mobile = /mobile|android|iphone|ipad|ipod/i;
+  const tablet = /tablet|ipad/i;
+
+  if (tablet.test(userAgent)) return '태블릿';
+  if (mobile.test(userAgent)) return '모바일';
+  return '데스크톱';
+};
+
+const formatTime = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}시간`);
+  if (minutes > 0) parts.push(`${minutes}분`);
+  parts.push(`${remainingSeconds}초`);
+  
+  return parts.join(' ');
+};
+
 const UserInfo = () => {
   const [ipInfo, setIpInfo] = useState<IpInfo | null>(null);
+  const [ipError, setIpError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [pageLoadTime] = useState(() => {
     const storedTime = localStorage.getItem('pageLoadTime');
@@ -22,7 +98,8 @@ const UserInfo = () => {
     localStorage.setItem('pageLoadTime', now.toISOString());
     return now;
   });
-  const [systemInfo, setSystemInfo] = useState({
+
+  const [systemInfo, setSystemInfo] = useState<SystemInfo>({
     browser: '',
     os: '',
     deviceType: '',
@@ -32,54 +109,9 @@ const UserInfo = () => {
     orientation: ''
   });
 
-  useEffect(() => {
-    // 시스템 정보 설정
+  // 시스템 정보 메모이제이션
+  const initialSystemInfo = useMemo(() => {
     const userAgent = navigator.userAgent;
-    
-    const getBrowserInfo = () => {
-      const browsers = {
-        chrome: /chrome|chromium/i,
-        safari: /safari/i,
-        firefox: /firefox/i,
-        opera: /opera|opr/i,
-        edge: /edg/i,
-        ie: /msie|trident/i,
-      };
-
-      for (const [browser, regex] of Object.entries(browsers)) {
-        if (regex.test(userAgent)) {
-          return browser.charAt(0).toUpperCase() + browser.slice(1);
-        }
-      }
-      return 'Unknown';
-    };
-
-    const getOSInfo = () => {
-      const os = {
-        windows: /windows/i,
-        mac: /mac/i,
-        linux: /linux/i,
-        android: /android/i,
-        ios: /iphone|ipad|ipod/i,
-      };
-
-      for (const [name, regex] of Object.entries(os)) {
-        if (regex.test(userAgent)) {
-          return name.charAt(0).toUpperCase() + name.slice(1);
-        }
-      }
-      return 'Unknown';
-    };
-
-    const getDeviceType = () => {
-      const mobile = /mobile|android|iphone|ipad|ipod/i;
-      const tablet = /tablet|ipad/i;
-
-      if (tablet.test(userAgent)) return '태블릿';
-      if (mobile.test(userAgent)) return '모바일';
-      return '데스크톱';
-    };
-
     const getConnectionInfo = () => {
       if ('connection' in navigator) {
         const conn = (navigator as any).connection;
@@ -105,46 +137,65 @@ const UserInfo = () => {
       return window.innerWidth > window.innerHeight ? '가로' : '세로';
     };
 
-    setSystemInfo({
-      browser: getBrowserInfo(),
-      os: getOSInfo(),
-      deviceType: getDeviceType(),
+    return {
+      browser: getBrowserInfo(userAgent),
+      os: getOSInfo(userAgent),
+      deviceType: getDeviceType(userAgent),
       connection: getConnectionInfo(),
       cores: navigator.hardwareConcurrency || 0,
       memory: getMemoryInfo(),
       orientation: getOrientation()
-    });
+    };
+  }, []);
+
+  // IP 정보 가져오기
+  const fetchIpInfo = useCallback(async () => {
+    try {
+      const res = await fetch('https://ipapi.co/json/');
+      if (!res.ok) throw new Error('서버 응답 오류');
+      const data = await res.json();
+      setIpInfo(data);
+      setIpError(null);
+      setRetryCount(0);
+    } catch (error) {
+      setIpError('IP 정보를 가져오는데 실패했습니다');
+      if (retryCount < MAX_RETRIES) {
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchIpInfo();
+        }, RETRY_DELAY);
+      }
+    }
+  }, [retryCount]);
+
+  // 방향 변경 핸들러
+  const handleOrientation = useCallback(() => {
+    setSystemInfo(prev => ({
+      ...prev,
+      orientation: window.screen.orientation?.type.includes('landscape') ? '가로' : '세로'
+    }));
+  }, []);
+
+  useEffect(() => {
+    // 초기 시스템 정보 설정
+    setSystemInfo(initialSystemInfo);
 
     // IP 정보 가져오기
-    fetch('https://ipapi.co/json/')
-      .then(res => res.json())
-      .then(data => {
-        setIpInfo(data);
-      })
-      .catch(() => {
-        console.error('IP 정보를 가져오는데 실패했습니다');
-      });
+    fetchIpInfo();
 
     // 시간 업데이트 타이머
     const timer = setInterval(() => {
       const now = new Date();
       const diff = Math.floor((now.getTime() - pageLoadTime.getTime()) / 1000);
       setElapsedTime(diff);
-    }, 1000);
+    }, UPDATE_INTERVAL);
 
     // 초기 시간 설정
     const now = new Date();
     const initialDiff = Math.floor((now.getTime() - pageLoadTime.getTime()) / 1000);
     setElapsedTime(initialDiff);
 
-    // 화면 방향 변경 감지
-    const handleOrientation = () => {
-      setSystemInfo(prev => ({
-        ...prev,
-        orientation: getOrientation(),
-      }));
-    };
-
+    // 이벤트 리스너 등록
     window.addEventListener('orientationchange', handleOrientation);
     window.addEventListener('resize', handleOrientation);
 
@@ -153,27 +204,19 @@ const UserInfo = () => {
       window.removeEventListener('orientationchange', handleOrientation);
       window.removeEventListener('resize', handleOrientation);
     };
-  }, [pageLoadTime]);
+  }, [pageLoadTime, initialSystemInfo, fetchIpInfo, handleOrientation]);
 
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainingSeconds = seconds % 60;
-    
-    const parts = [];
-    if (hours > 0) parts.push(`${hours}시간`);
-    if (minutes > 0) parts.push(`${minutes}분`);
-    parts.push(`${remainingSeconds}초`);
-    
-    return parts.join(' ');
-  };
+  // 메모이제이션된 시간 포맷
+  const formattedTime = useMemo(() => formatTime(elapsedTime), [elapsedTime]);
 
   return (
     <div className="user-info">
       <div className="user-info-summary">
-        <span className="user-info-ip">{ipInfo?.ip || '로딩 중...'}</span>
+        <span className="user-info-ip">
+          {ipError ? '오류 발생' : (ipInfo?.ip || '로딩 중...')}
+        </span>
         <span className="user-info-browser">{systemInfo.browser}</span>
-        <span className="user-info-time">{formatTime(elapsedTime)}</span>
+        <span className="user-info-time">{formattedTime}</span>
       </div>
 
       <div className="user-info-details">
@@ -181,7 +224,7 @@ const UserInfo = () => {
           <div className="info-section-title">방문 정보</div>
           <div className="info-row">
             <span className="info-label">체류 시간</span>
-            <span className="info-value highlight">{formatTime(elapsedTime)}</span>
+            <span className="info-value highlight">{formattedTime}</span>
           </div>
         </div>
 
@@ -189,21 +232,27 @@ const UserInfo = () => {
           <div className="info-section-title">네트워크 정보</div>
           <div className="info-row">
             <span className="info-label">IP</span>
-            <span className="info-value">{ipInfo?.ip || '로딩 중...'}</span>
+            <span className="info-value">
+              {ipError ? '오류 발생' : (ipInfo?.ip || '로딩 중...')}
+            </span>
           </div>
           <div className="info-row">
             <span className="info-label">위치</span>
             <span className="info-value">
-              {ipInfo ? `${ipInfo.city}, ${ipInfo.region}, ${ipInfo.country_name}` : '로딩 중...'}
+              {ipError ? '오류 발생' : (ipInfo ? `${ipInfo.city}, ${ipInfo.region}, ${ipInfo.country_name}` : '로딩 중...')}
             </span>
           </div>
           <div className="info-row">
             <span className="info-label">시간대</span>
-            <span className="info-value">{ipInfo?.timezone || '로딩 중...'}</span>
+            <span className="info-value">
+              {ipError ? '오류 발생' : (ipInfo?.timezone || '로딩 중...')}
+            </span>
           </div>
           <div className="info-row">
             <span className="info-label">ISP</span>
-            <span className="info-value">{ipInfo?.org || '로딩 중...'}</span>
+            <span className="info-value">
+              {ipError ? '오류 발생' : (ipInfo?.org || '로딩 중...')}
+            </span>
           </div>
           <div className="info-row">
             <span className="info-label">연결</span>
@@ -247,12 +296,6 @@ const UserInfo = () => {
           </div>
           <div className="info-row">
             <span className="info-label">화면</span>
-            <span className="info-value">
-              {window.screen.width}x{window.screen.height} ({window.devicePixelRatio}x)
-            </span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">방향</span>
             <span className="info-value">{systemInfo.orientation}</span>
           </div>
         </div>
