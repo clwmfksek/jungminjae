@@ -16,12 +16,15 @@ const RESET_PASSWORD = import.meta.env.VITE_RESET_PASSWORD || '1234';
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState(() => {
+    return localStorage.getItem('chat_username') || '';
+  });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<'연결 중...' | '연결됨' | '연결 끊김'>('연결 중...');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const observerRef = useRef<IntersectionObserver>();
+  const observerRef = useRef<IntersectionObserver | null>(null);
   const loadingRef = useRef<HTMLDivElement>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
@@ -84,11 +87,12 @@ export default function Chat() {
         },
         (payload) => {
           const newMessage = payload.new as Message;
-          // 자신이 보낸 메시지는 이미 화면에 표시되어 있으므로 무시
           setMessages(prev => {
             const isDuplicate = prev.some(msg => msg.id === newMessage.id);
             if (isDuplicate) return prev;
-            return [...prev, newMessage];
+            const updatedMessages = [...prev, newMessage];
+            // 최신 100개 메시지만 유지
+            return updatedMessages.slice(-100);
           });
           scrollToBottom();
         }
@@ -107,6 +111,14 @@ export default function Chat() {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('실시간 채팅 연결됨');
+          setConnectionStatus('연결됨');
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          console.log('실시간 채팅 연결 끊김');
+          setConnectionStatus('연결 끊김');
+          // 3초 후 재연결 시도
+          setTimeout(() => {
+            channel.subscribe();
+          }, 3000);
         }
       });
 
@@ -195,17 +207,29 @@ export default function Chat() {
     }
   };
 
+  // 사용자 이름 저장
+  useEffect(() => {
+    if (userName) {
+      localStorage.setItem('chat_username', userName);
+    }
+  }, [userName]);
+
   return (
     <div className="chat-container">
       <div className="chat-header">
         <div className="chat-header-content">
           <h2>실시간 채팅</h2>
-          <button 
-            onClick={() => setIsResetModalOpen(true)}
-            className="chat-reset-button"
-          >
-            채팅 초기화
-          </button>
+          <div className="chat-controls">
+            <span className={`connection-status ${connectionStatus === '연결됨' ? 'connected' : connectionStatus === '연결 끊김' ? 'disconnected' : ''}`}>
+              {connectionStatus}
+            </span>
+            <button 
+              onClick={() => setIsResetModalOpen(true)}
+              className="chat-reset-button"
+            >
+              채팅 초기화
+            </button>
+          </div>
         </div>
       </div>
       <div className="chat-messages">

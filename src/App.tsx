@@ -5,6 +5,9 @@ import { RealtimeChannel } from "@supabase/supabase-js";
 import Chat from './components/Chat'
 import PasswordModal from './components/PasswordModal'
 
+// 테마 타입 정의
+type Theme = 'light' | 'dark';
+
 interface PersonCount {
   name: string;
   count: number;
@@ -31,27 +34,25 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const savedTheme = localStorage.getItem('theme') as Theme;
+    return savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  });
   const RESET_PASSWORD = import.meta.env.VITE_RESET_PASSWORD || '1234';
 
-  // 실시간 업데이트 처리 함수를 메모이제이션
-  const handleRealtimeUpdate = useCallback((payload: any) => {
-    const updatedRecord = payload.new as CounterRecord;
-    
-    setPeople(currentPeople => {
-      const newPeople = currentPeople.map(person =>
-        person.name === updatedRecord.name
-          ? { ...person, count: updatedRecord.count }
-          : person
-      );
-
-      // 모든 카운터가 0인지 확인
-      if (updatedRecord.count === 0 && newPeople.every(p => p.count === 0)) {
-        setTimeout(() => createConfetti(), 0);
-      }
-
-      return newPeople;
+  // 테마 변경 함수
+  const toggleTheme = useCallback(() => {
+    setTheme(prevTheme => {
+      const newTheme = prevTheme === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', newTheme);
+      return newTheme;
     });
   }, []);
+
+  // 테마 효과 적용
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   const setupRealtimeSubscription = useCallback(async () => {
     const channel = supabase.channel('db-changes', {
@@ -65,31 +66,44 @@ function App() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'counters',
         },
-        handleRealtimeUpdate
+        async (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updatedRecord = payload.new as CounterRecord;
+            setPeople(currentPeople => {
+              return currentPeople.map(person =>
+                person.name === updatedRecord.name
+                  ? { ...person, count: updatedRecord.count }
+                  : person
+              );
+            });
+          }
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('실시간 채팅 연결됨');
+        }
+      });
 
     return channel;
-  }, [handleRealtimeUpdate]);
+  }, []);
 
   useEffect(() => {
-    let channel: RealtimeChannel;
-
     const initialize = async () => {
       try {
         setLoading(true);
+        await fetchCounts();
+        const subscriptionChannel = await setupRealtimeSubscription();
         
-        // 병렬로 초기 데이터 로드와 실시간 구독 설정
-        const [_, subscriptionChannel] = await Promise.all([
-          fetchCounts(),
-          setupRealtimeSubscription()
-        ]);
-        
-        channel = subscriptionChannel;
+        return () => {
+          if (subscriptionChannel) {
+            subscriptionChannel.unsubscribe();
+          }
+        };
       } catch (error) {
         setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
       } finally {
@@ -98,67 +112,7 @@ function App() {
     };
 
     initialize();
-
-    return () => {
-      if (channel) {
-        channel.unsubscribe();
-      }
-    };
   }, [setupRealtimeSubscription]);
-
-  const incrementCount = async (index: number) => {
-    try {
-      const person = people[index];
-      const newCount = person.count + 1;
-
-      // 낙관적 업데이트
-      setPeople(currentPeople => 
-        currentPeople.map((p, i) => 
-          i === index ? { ...p, count: newCount } : p
-        )
-      );
-
-      const { error } = await supabase
-        .from('counters')
-        .update({ count: newCount })
-        .eq('name', person.name);
-
-      if (error) {
-        // 실패 시 롤백
-        setPeople(currentPeople => 
-          currentPeople.map((p, i) => 
-            i === index ? { ...p, count: person.count } : p
-          )
-        );
-        setError(error.message);
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
-    }
-  };
-
-  const resetCount = async () => {
-    try {
-      // 낙관적 업데이트
-      setPeople(currentPeople => 
-        currentPeople.map(p => ({ ...p, count: 0 }))
-      );
-      createConfetti();
-
-      const { error } = await supabase
-        .from('counters')
-        .update({ count: 0 })
-        .in('name', people.map(p => p.name));
-
-      if (error) {
-        // 실패 시 롤백
-        setPeople(people);
-        setError(error.message);
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
-    }
-  };
 
   const fetchCounts = async () => {
     try {
@@ -195,6 +149,64 @@ function App() {
     }
   };
 
+  const incrementCount = async (index: number) => {
+    try {
+      const person = people[index];
+      const newCount = person.count + 1;
+
+      setPeople(currentPeople => 
+        currentPeople.map((p, i) => 
+          i === index ? { ...p, count: newCount } : p
+        )
+      );
+
+      const { error } = await supabase
+        .from('counters')
+        .update({ count: newCount })
+        .eq('name', person.name);
+
+      if (error) {
+        setPeople(currentPeople => 
+          currentPeople.map((p, i) => 
+            i === index ? { ...p, count: person.count } : p
+          )
+        );
+        setError(error.message);
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
+    }
+  };
+
+  const resetCount = async (password: string) => {
+    if (password !== RESET_PASSWORD) {
+      alert('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    try {
+      const channel = supabase.channel('db-changes');
+      await channel.unsubscribe();
+
+      const { error: counterError } = await supabase
+        .from('counters')
+        .update({ count: 0 })
+        .in('name', people.map(p => p.name));
+
+      if (counterError) throw counterError;
+
+      setPeople(people.map(p => ({ ...p, count: 0 })));
+      await setupRealtimeSubscription();
+      
+      createConfetti();
+      setIsResetModalOpen(false);
+    } catch (error) {
+      console.error('초기화 중 오류:', error);
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
+      await setupRealtimeSubscription();
+    }
+  };
+
   const createConfetti = () => {
     const colors = ['#3182F6', '#00D3BE', '#FF6B6B', '#FFD93D', '#4ADE80'];
     const newConfetti = [];
@@ -225,19 +237,6 @@ function App() {
     setTimeout(() => setConfetti([]), 800);
   };
 
-  const handleResetAttempt = () => {
-    setIsResetModalOpen(true);
-  };
-
-  const handleResetConfirm = async (password: string) => {
-    if (password === RESET_PASSWORD) {
-      await resetCount();
-      setIsResetModalOpen(false);
-    } else {
-      alert('비밀번호가 일치하지 않습니다.');
-    }
-  };
-
   if (loading) {
     return (
       <div style={{ 
@@ -255,7 +254,12 @@ function App() {
   return (
     <div className="app-container">
       <div className="counter-section">
-        <h1>날먹 카운터</h1>
+        <div className="header-controls">
+          <h1>날먹 카운터</h1>
+          <button onClick={toggleTheme} className="theme-toggle">
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+        </div>
         {error && (
           <div style={{ 
             color: 'red', 
@@ -272,7 +276,7 @@ function App() {
           <button onClick={() => incrementCount(0)} className="increment-button">
             날먹하기
           </button>
-          <button onClick={handleResetAttempt} className="reset-button">
+          <button onClick={() => setIsResetModalOpen(true)} className="reset-button">
             리셋
           </button>
         </div>
@@ -303,7 +307,7 @@ function App() {
       <PasswordModal
         isOpen={isResetModalOpen}
         onClose={() => setIsResetModalOpen(false)}
-        onSubmit={handleResetConfirm}
+        onSubmit={resetCount}
         title="리셋 비밀번호 입력"
       />
     </div>
