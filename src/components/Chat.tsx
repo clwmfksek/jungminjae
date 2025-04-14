@@ -199,6 +199,13 @@ export default function Chat() {
         throw error;
       }
       
+      // 초기화 이벤트 브로드캐스트
+      await supabase.channel('reset-events').send({
+        type: 'broadcast',
+        event: 'chat-reset',
+        payload: {}
+      });
+      
       setMessages([]);
       setIsResetModalOpen(false);
     } catch (err) {

@@ -4,6 +4,7 @@ import { supabase, CounterRecord } from "./lib/supabase";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import Chat from './components/Chat'
 import PasswordModal from './components/PasswordModal'
+import { createConfetti } from './utils/confetti';
 
 // 테마 타입 정의
 type Theme = 'light' | 'dark';
@@ -114,6 +115,22 @@ function App() {
     initialize();
   }, [setupRealtimeSubscription]);
 
+  useEffect(() => {
+    const channel = supabase.channel('reset-events')
+      .on(
+        'broadcast',
+        { event: 'chat-reset' },
+        () => {
+          createConfetti(setConfetti);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, []);
+
   const fetchCounts = async () => {
     try {
       const { data, error } = await supabase
@@ -198,43 +215,13 @@ function App() {
       setPeople(people.map(p => ({ ...p, count: 0 })));
       await setupRealtimeSubscription();
       
-      createConfetti();
+      createConfetti(setConfetti);
       setIsResetModalOpen(false);
     } catch (error) {
       console.error('초기화 중 오류:', error);
       setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다');
       await setupRealtimeSubscription();
     }
-  };
-
-  const createConfetti = () => {
-    const colors = ['#3182F6', '#00D3BE', '#FF6B6B', '#FFD93D', '#4ADE80'];
-    const newConfetti = [];
-    const centerX = window.innerWidth / 2;
-    const centerY = window.innerHeight / 2;
-    
-    for (let i = 0; i < 40; i++) {
-      const angle = (i / 40) * Math.PI * 2;
-      const velocity = 150 + Math.random() * 150;
-      const tx = Math.cos(angle) * velocity;
-      const ty = Math.sin(angle) * velocity;
-      const rotation = Math.random() * 360;
-      const type = Math.random() > 0.5 ? 'circle' as const : 'square' as const;
-      
-      newConfetti.push({
-        id: Date.now() + i,
-        x: centerX,
-        y: centerY,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        tx,
-        ty,
-        rotation,
-        type
-      });
-    }
-    
-    setConfetti(newConfetti);
-    setTimeout(() => setConfetti([]), 800);
   };
 
   if (loading) {
