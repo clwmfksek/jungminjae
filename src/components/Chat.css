@@ -81,30 +81,25 @@
   font-size: 0.9rem;
   max-width: 80%;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  position: relative;
+  margin-left: 0;
+  color: var(--text-primary);
 }
 
 .chat-message strong {
   color: var(--accent-color);
   margin-right: 8px;
   font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
 }
 
 .message-time {
   position: absolute;
   right: 12px;
-  bottom: 8px;
+  top: 10px;
   font-size: 11px;
   color: var(--text-secondary);
-}
-
-.chat-message.own-message {
-  background-color: var(--accent-color);
-  color: white;
-  margin-left: auto;
-}
-
-.chat-message.own-message .message-header {
-  color: rgba(255, 255, 255, 0.8);
 }
 
 .message-header {

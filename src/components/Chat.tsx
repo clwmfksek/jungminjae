@@ -296,9 +296,7 @@ export default function Chat() {
         {messages.map((message) => (
           <div 
             key={message.id} 
-            className={`chat-message ${
-              message.user_name === userName ? 'own-message' : ''
-            }`}
+            className="chat-message"
           >
             <strong>{message.user_name}</strong>
             {message.content}
