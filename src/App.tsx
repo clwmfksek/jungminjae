@@ -6,6 +6,7 @@ import Chat from './components/Chat'
 import PasswordModal from './components/PasswordModal'
 import { createConfetti } from './utils/confetti';
 import UserInfo from './components/UserInfo';
+import { motion } from "framer-motion";
 
 // 테마 타입 정의
 type Theme = 'light' | 'dark';
@@ -130,6 +131,15 @@ function App() {
     return () => {
       channel.unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      createConfetti(setConfetti, e.clientX, e.clientY);
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
   }, []);
 
   const fetchCounts = async () => {
@@ -274,24 +284,31 @@ function App() {
       <Chat />
       
       <div className="confetti-container">
-        {confetti.map((conf) => {
-          const style = {
-            left: `${conf.x}px`,
-            top: `${conf.y}px`,
-            backgroundColor: conf.color,
-            '--tx': `${conf.tx}px`,
-            '--ty': `${conf.ty}px`,
-            '--rotation': `${conf.rotation}deg`
-          } as React.CSSProperties;
-
-          return (
-            <div
-              key={conf.id}
-              className={`confetti-style3 ${conf.type}`}
-              style={style}
-            />
-          );
-        })}
+        {confetti.map(conf => (
+          <motion.div
+            key={conf.id}
+            className={`confetti ${conf.type}`}
+            style={{
+              backgroundColor: conf.color,
+              left: conf.x,
+              top: conf.y,
+              rotate: conf.rotation,
+            }}
+            initial={{ opacity: 1 }}
+            animate={{
+              x: conf.tx,
+              y: conf.ty,
+              opacity: 0,
+            }}
+            transition={{
+              duration: 1,
+              ease: "easeOut",
+            }}
+            onAnimationComplete={() => {
+              setConfetti(prev => prev.filter(c => c.id !== conf.id));
+            }}
+          />
+        ))}
       </div>
       <PasswordModal
         isOpen={isResetModalOpen}

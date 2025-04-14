@@ -218,4 +218,86 @@
 .connection-status.disconnected {
   background-color: rgba(239, 68, 68, 0.1);
   color: #ef4444;
+}
+
+/* 모바일 최적화 */
+@media (max-width: 768px) {
+  .chat-container {
+    max-width: 100%;
+    margin: 0;
+    padding: 1rem;
+    height: 70vh;
+  }
+
+  .chat-header {
+    padding: 0.75rem 0;
+    margin-bottom: 1rem;
+  }
+
+  .chat-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .chat-messages {
+    max-height: calc(70vh - 180px);
+  }
+
+  .chat-message {
+    padding: 0.625rem 0.875rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .message-time {
+    font-size: 0.675rem;
+  }
+
+  .chat-form {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .chat-input {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .name-input {
+    flex: none;
+    width: 100%;
+  }
+
+  .chat-submit {
+    width: 100%;
+    padding: 0.75rem;
+  }
+
+  .chat-reset-button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* 작은 모바일 화면 */
+@media (max-width: 360px) {
+  .chat-container {
+    padding: 0.75rem;
+    height: 65vh;
+  }
+
+  .chat-messages {
+    max-height: calc(65vh - 160px);
+  }
+
+  .chat-message {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .chat-input {
+    padding: 0.625rem;
+    font-size: 0.8125rem;
+  }
 } 

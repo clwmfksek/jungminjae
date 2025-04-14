@@ -209,6 +209,21 @@ h1 {
   z-index: 1000;
 }
 
+.confetti {
+  position: fixed;
+  pointer-events: none;
+  width: 10px;
+  height: 10px;
+}
+
+.confetti.circle {
+  border-radius: 50%;
+}
+
+.confetti.square {
+  border-radius: 2px;
+}
+
 .confetti-style3 {
   position: fixed;
   pointer-events: none;
@@ -463,4 +478,69 @@ h1 {
   font-size: 1.5rem;
   font-weight: bold;
   color: var(--accent-color);
+}
+
+/* 모바일 최적화 */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .counter-section {
+    padding: 1rem;
+    border-radius: 12px;
+  }
+
+  .header-controls h1 {
+    font-size: 1.5rem;
+  }
+
+  .theme-toggle {
+    width: 40px;
+    height: 40px;
+    font-size: 1.25rem;
+  }
+
+  .count-display {
+    font-size: 3rem;
+    margin: 1.5rem 0;
+  }
+
+  .button-container {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .increment-button, .reset-button {
+    width: 100%;
+    padding: 0.875rem;
+    font-size: 1.125rem;
+    border-radius: 8px;
+  }
+}
+
+/* 작은 모바일 화면 */
+@media (max-width: 360px) {
+  .app-container {
+    padding: 0.75rem;
+  }
+
+  .counter-section {
+    padding: 0.75rem;
+  }
+
+  .header-controls h1 {
+    font-size: 1.25rem;
+  }
+
+  .count-display {
+    font-size: 2.5rem;
+    margin: 1rem 0;
+  }
+
+  .increment-button, .reset-button {
+    padding: 0.75rem;
+    font-size: 1rem;
+  }
 }
