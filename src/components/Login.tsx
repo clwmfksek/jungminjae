@@ -1,55 +1,49 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { initializeKakao, loginWithKakao, checkKakaoLogin, KakaoUser } from '../lib/kakao';
-import { supabase } from '../lib/supabase';
+import { initializeKakao, loginWithKakao, logoutKakao } from '../lib/kakao';
+import { useAuth } from '../context/AuthContext';
 import './Login.css';
 
 const Login = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState<KakaoUser | null>(null);
+  const { state, login, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    initializeKakao();
-    checkKakaoLogin()
-      .then(async (userData) => {
-        if (userData) {
-          setUser(userData);
-          // Supabase에 사용자 정보 저장
-          await saveUserToSupabase(userData);
-          // 로그인 성공 시 이전 페이지로 이동
-          navigate(-1);
-        }
-      })
-      .finally(() => setIsLoading(false));
-  }, [navigate]);
+    const initializeAuth = async () => {
+      try {
+        initializeKakao();
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Failed to initialize Kakao:', error);
+        setIsLoading(false);
+      }
+    };
 
-  const saveUserToSupabase = async (userData: KakaoUser) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .upsert({
-          kakao_id: userData.id,
-          nickname: userData.properties.nickname,
-          profile_image: userData.properties.profile_image,
-          last_login: new Date().toISOString(),
-        });
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Failed to save user:', error);
-    }
-  };
+    initializeAuth();
+  }, []);
 
   const handleLogin = async () => {
     try {
       setIsLoading(true);
       const userData = await loginWithKakao();
-      setUser(userData);
-      await saveUserToSupabase(userData);
+      await login(userData);
       navigate(-1);
     } catch (error) {
       console.error('Login failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      setIsLoading(true);
+      await logoutKakao();
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
     } finally {
       setIsLoading(false);
     }
@@ -70,13 +64,19 @@ const Login = () => {
         <p className="login-description">
           게임 기록을 저장하고 다른 사용자들과 경쟁해보세요!
         </p>
-        <button onClick={handleLogin} className="kakao-login-button">
-          <img 
-            src="/kakao_login_medium_narrow.png" 
-            alt="카카오 로그인"
-            className="kakao-login-image"
-          />
-        </button>
+        {state.user ? (
+          <button onClick={handleLogout} className="logout-button">
+            로그아웃
+          </button>
+        ) : (
+          <button onClick={handleLogin} className="kakao-login-button">
+            <img 
+              src="/kakao_login_medium_narrow.png" 
+              alt="카카오 로그인"
+              className="kakao-login-image"
+            />
+          </button>
+        )}
       </div>
     </div>
   );
