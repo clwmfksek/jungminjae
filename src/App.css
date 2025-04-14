@@ -274,16 +274,18 @@ h1 {
 }
 
 .app-container {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
   min-height: 100vh;
-  padding: 2rem;
-  transition: background-color 0.3s ease;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  overflow: hidden;
+}
+
+.content-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
 }
 
 .header-controls {
@@ -542,5 +544,20 @@ h1 {
   .increment-button, .reset-button {
     padding: 0.75rem;
     font-size: 1rem;
+  }
+}
+
+.content-container {
+  margin-top: 4rem;
+  padding: 1rem;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 768px) {
+  .content-container {
+    margin-top: 3.5rem;
+    padding: 0.5rem;
   }
 }

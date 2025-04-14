@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import './Chat.css';
 import PasswordModal from './PasswordModal';
+import { useLocation } from 'react-router-dom';
 
 interface Message {
   id: string;
@@ -23,16 +24,34 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'연결 중...' | '연결됨' | '연결 끊김'>('연결 중...');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadingRef = useRef<HTMLDivElement>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
 
   const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (shouldScrollToBottom && chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [shouldScrollToBottom]);
+
+  const handleScroll = useCallback(() => {
+    if (chatMessagesRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
+      const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
+      setShouldScrollToBottom(isNearBottom);
     }
   }, []);
+
+  useEffect(() => {
+    const chatMessages = chatMessagesRef.current;
+    if (chatMessages) {
+      chatMessages.addEventListener('scroll', handleScroll);
+      return () => chatMessages.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
 
   const fetchMessages = useCallback(async (isInitial = false) => {
     try {
@@ -53,13 +72,13 @@ export default function Chat() {
       
       setMessages(prev => {
         if (isInitial) return newMessages;
-        // 중복 메시지 제거
         const uniqueMessages = newMessages.filter(
           newMsg => !prev.some(prevMsg => prevMsg.id === newMsg.id)
         );
         return [...prev, ...uniqueMessages];
       });
 
+      // 초기 로딩 시 항상 스크롤 아래로
       if (isInitial) {
         setTimeout(scrollToBottom, 100);
       }
@@ -71,11 +90,14 @@ export default function Chat() {
     }
   }, [messages.length, scrollToBottom]);
 
+  // 컴포넌트 마운트 시와 메시지 업데이트 시 스크롤 최하단으로
   useEffect(() => {
-    // 초기 메시지 로드
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  useEffect(() => {
     fetchMessages(true);
 
-    // 실시간 구독 설정
     const channel = supabase
       .channel('messages-channel')
       .on(
@@ -91,10 +113,9 @@ export default function Chat() {
             const isDuplicate = prev.some(msg => msg.id === newMessage.id);
             if (isDuplicate) return prev;
             const updatedMessages = [...prev, newMessage];
-            // 최신 100개 메시지만 유지
             return updatedMessages.slice(-100);
           });
-          scrollToBottom();
+          scrollToBottom(); // 새 메시지 수신 시 항상 스크롤 아래로
         }
       )
       .on(
@@ -106,6 +127,7 @@ export default function Chat() {
         },
         () => {
           setMessages([]);
+          setShouldScrollToBottom(true);
         }
       )
       .subscribe((status) => {
@@ -115,7 +137,6 @@ export default function Chat() {
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           console.log('실시간 채팅 연결 끊김');
           setConnectionStatus('연결 끊김');
-          // 3초 후 재연결 시도
           setTimeout(() => {
             channel.subscribe();
           }, 3000);
@@ -125,7 +146,7 @@ export default function Chat() {
     return () => {
       channel.unsubscribe();
     };
-  }, [fetchMessages, scrollToBottom]);
+  }, [fetchMessages, scrollToBottom, shouldScrollToBottom]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -169,9 +190,9 @@ export default function Chat() {
 
       if (error) throw error;
 
-      // 서버에서 받은 응답으로 메시지 추가
       if (data) {
         setMessages(prev => [...prev, data]);
+        setShouldScrollToBottom(true);
         scrollToBottom();
       }
       
@@ -221,6 +242,13 @@ export default function Chat() {
     }
   }, [userName]);
 
+  // 라우트 변경 시 채팅 컴포넌트 스크롤 초기화
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [location]);
+
   return (
     <div className="chat-container">
       <div className="chat-header">
@@ -239,7 +267,7 @@ export default function Chat() {
           </div>
         </div>
       </div>
-      <div className="chat-messages">
+      <div className="chat-messages" ref={chatMessagesRef}>
         <div ref={loadingRef} className="loading-trigger">
           {isLoading && <div className="loading">메시지 불러오는 중...</div>}
         </div>
@@ -251,7 +279,6 @@ export default function Chat() {
             </span>
           </div>
         ))}
-        <div ref={messagesEndRef} />
       </div>
       {error && <div className="error-message">{error}</div>}
       <form onSubmit={handleSubmit} className="chat-form">

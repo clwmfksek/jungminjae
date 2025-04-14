@@ -1,75 +1,41 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import './UserInfo.css';
-
-interface UserInfoProps {
-  className?: string;
-}
 
 interface IpInfo {
   ip: string;
-  country: string;
+  country_name: string;
   city: string;
   region: string;
   timezone: string;
   org: string;
 }
 
-interface SystemInfo {
-  browser: string;
-  os: string;
-  platform: string;
-  language: string;
-  cores: number;
-  memory: string;
-  screenSize: string;
-  connection: string;
-  deviceType: string;
-  orientation: string;
-  visitTime: string;
-}
-
-export default function UserInfo({ className = '' }: UserInfoProps) {
+const UserInfo = () => {
   const [ipInfo, setIpInfo] = useState<IpInfo | null>(null);
-  const [systemInfo, setSystemInfo] = useState<SystemInfo>({
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [pageLoadTime] = useState(() => {
+    const storedTime = localStorage.getItem('pageLoadTime');
+    if (storedTime) {
+      return new Date(storedTime);
+    }
+    const now = new Date();
+    localStorage.setItem('pageLoadTime', now.toISOString());
+    return now;
+  });
+  const [systemInfo, setSystemInfo] = useState({
     browser: '',
     os: '',
-    platform: '',
-    language: '',
-    cores: 0,
-    memory: '',
-    screenSize: '',
-    connection: '',
     deviceType: '',
-    orientation: '',
-    visitTime: '0분 0초'
+    connection: '',
+    cores: 0,
+    memory: '알 수 없음',
+    orientation: ''
   });
-  const [isExpanded, setIsExpanded] = useState(false);
-  const visitStartTime = useRef(Date.now());
-
-  useEffect(() => {
-    // 방문 시간 업데이트
-    const updateVisitTime = () => {
-      const now = Date.now();
-      const diff = now - visitStartTime.current;
-      const minutes = Math.floor(diff / 60000);
-      const seconds = Math.floor((diff % 60000) / 1000);
-      
-      setSystemInfo(prev => ({
-        ...prev,
-        visitTime: `${minutes}분 ${seconds}초`
-      }));
-    };
-
-    const timer = setInterval(updateVisitTime, 1000);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
 
   useEffect(() => {
     // 시스템 정보 설정
     const userAgent = navigator.userAgent;
+    
     const getBrowserInfo = () => {
       const browsers = {
         chrome: /chrome|chromium/i,
@@ -124,8 +90,12 @@ export default function UserInfo({ className = '' }: UserInfoProps) {
       return '알 수 없음';
     };
 
-    const getScreenInfo = () => {
-      return `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`;
+    const getMemoryInfo = () => {
+      if ('memory' in navigator) {
+        const memory = (navigator as any).deviceMemory;
+        return memory ? `${memory}GB` : '알 수 없음';
+      }
+      return '알 수 없음';
     };
 
     const getOrientation = () => {
@@ -135,44 +105,37 @@ export default function UserInfo({ className = '' }: UserInfoProps) {
       return window.innerWidth > window.innerHeight ? '가로' : '세로';
     };
 
-    const getMemoryInfo = () => {
-      if ('memory' in navigator) {
-        const memory = (navigator as any).deviceMemory;
-        return memory ? `${memory}GB` : '알 수 없음';
-      }
-      return '알 수 없음';
-    };
-
     setSystemInfo({
       browser: getBrowserInfo(),
       os: getOSInfo(),
-      platform: navigator.platform,
-      language: navigator.language,
+      deviceType: getDeviceType(),
+      connection: getConnectionInfo(),
       cores: navigator.hardwareConcurrency || 0,
       memory: getMemoryInfo(),
-      screenSize: getScreenInfo(),
-      connection: getConnectionInfo(),
-      deviceType: getDeviceType(),
-      orientation: getOrientation(),
-      visitTime: '0분 0초'
+      orientation: getOrientation()
     });
 
     // IP 정보 가져오기
     fetch('https://ipapi.co/json/')
       .then(res => res.json())
       .then(data => {
-        setIpInfo({
-          ip: data.ip,
-          country: data.country_name,
-          city: data.city,
-          region: data.region,
-          timezone: data.timezone,
-          org: data.org,
-        });
+        setIpInfo(data);
       })
-      .catch(error => {
-        console.error('IP 정보를 가져오는데 실패했습니다:', error);
+      .catch(() => {
+        console.error('IP 정보를 가져오는데 실패했습니다');
       });
+
+    // 시간 업데이트 타이머
+    const timer = setInterval(() => {
+      const now = new Date();
+      const diff = Math.floor((now.getTime() - pageLoadTime.getTime()) / 1000);
+      setElapsedTime(diff);
+    }, 1000);
+
+    // 초기 시간 설정
+    const now = new Date();
+    const initialDiff = Math.floor((now.getTime() - pageLoadTime.getTime()) / 1000);
+    setElapsedTime(initialDiff);
 
     // 화면 방향 변경 감지
     const handleOrientation = () => {
@@ -186,102 +149,116 @@ export default function UserInfo({ className = '' }: UserInfoProps) {
     window.addEventListener('resize', handleOrientation);
 
     return () => {
+      clearInterval(timer);
       window.removeEventListener('orientationchange', handleOrientation);
       window.removeEventListener('resize', handleOrientation);
     };
-  }, []);
+  }, [pageLoadTime]);
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}시간`);
+    if (minutes > 0) parts.push(`${minutes}분`);
+    parts.push(`${remainingSeconds}초`);
+    
+    return parts.join(' ');
+  };
 
   return (
-    <div 
-      className={`user-info ${className} ${isExpanded ? 'expanded' : ''}`}
-      onClick={() => setIsExpanded(!isExpanded)}
-    >
+    <div className="user-info">
       <div className="user-info-summary">
         <span className="user-info-ip">{ipInfo?.ip || '로딩 중...'}</span>
         <span className="user-info-browser">{systemInfo.browser}</span>
-        <span className="user-info-time">{systemInfo.visitTime}</span>
+        <span className="user-info-time">{formatTime(elapsedTime)}</span>
       </div>
-      {isExpanded && (
-        <div className="user-info-details">
-          <div className="info-section">
-            <div className="info-section-title">방문 정보</div>
-            <div className="info-row">
-              <span className="info-label">체류 시간:</span>
-              <span className="info-value highlight">{systemInfo.visitTime}</span>
-            </div>
-          </div>
 
-          <div className="info-section">
-            <div className="info-section-title">네트워크 정보</div>
-            <div className="info-row">
-              <span className="info-label">IP:</span>
-              <span className="info-value">{ipInfo?.ip || '로딩 중...'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">위치:</span>
-              <span className="info-value">
-                {ipInfo ? `${ipInfo.city}, ${ipInfo.region}, ${ipInfo.country}` : '로딩 중...'}
-              </span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">시간대:</span>
-              <span className="info-value">{ipInfo?.timezone || '로딩 중...'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">ISP:</span>
-              <span className="info-value">{ipInfo?.org || '로딩 중...'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">연결:</span>
-              <span className="info-value">{systemInfo.connection}</span>
-            </div>
-          </div>
-
-          <div className="info-section">
-            <div className="info-section-title">시스템 정보</div>
-            <div className="info-row">
-              <span className="info-label">기기:</span>
-              <span className="info-value">{systemInfo.deviceType}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">OS:</span>
-              <span className="info-value">{systemInfo.os}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">플랫폼:</span>
-              <span className="info-value">{systemInfo.platform}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">브라우저:</span>
-              <span className="info-value">{systemInfo.browser}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">언어:</span>
-              <span className="info-value">{systemInfo.language}</span>
-            </div>
-          </div>
-
-          <div className="info-section">
-            <div className="info-section-title">하드웨어 정보</div>
-            <div className="info-row">
-              <span className="info-label">CPU 코어:</span>
-              <span className="info-value">{systemInfo.cores}개</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">메모리:</span>
-              <span className="info-value">{systemInfo.memory}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">화면:</span>
-              <span className="info-value">{systemInfo.screenSize}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">방향:</span>
-              <span className="info-value">{systemInfo.orientation}</span>
-            </div>
+      <div className="user-info-details">
+        <div className="info-section">
+          <div className="info-section-title">방문 정보</div>
+          <div className="info-row">
+            <span className="info-label">체류 시간</span>
+            <span className="info-value highlight">{formatTime(elapsedTime)}</span>
           </div>
         </div>
-      )}
+
+        <div className="info-section">
+          <div className="info-section-title">네트워크 정보</div>
+          <div className="info-row">
+            <span className="info-label">IP</span>
+            <span className="info-value">{ipInfo?.ip || '로딩 중...'}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">위치</span>
+            <span className="info-value">
+              {ipInfo ? `${ipInfo.city}, ${ipInfo.region}, ${ipInfo.country_name}` : '로딩 중...'}
+            </span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">시간대</span>
+            <span className="info-value">{ipInfo?.timezone || '로딩 중...'}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">ISP</span>
+            <span className="info-value">{ipInfo?.org || '로딩 중...'}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">연결</span>
+            <span className="info-value">{systemInfo.connection}</span>
+          </div>
+        </div>
+
+        <div className="info-section">
+          <div className="info-section-title">시스템 정보</div>
+          <div className="info-row">
+            <span className="info-label">기기</span>
+            <span className="info-value">{systemInfo.deviceType}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">OS</span>
+            <span className="info-value">{systemInfo.os}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">플랫폼</span>
+            <span className="info-value">{navigator.platform}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">브라우저</span>
+            <span className="info-value">{systemInfo.browser}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">언어</span>
+            <span className="info-value">{navigator.language}</span>
+          </div>
+        </div>
+
+        <div className="info-section">
+          <div className="info-section-title">하드웨어 정보</div>
+          <div className="info-row">
+            <span className="info-label">CPU 코어</span>
+            <span className="info-value">{systemInfo.cores}개</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">메모리</span>
+            <span className="info-value">{systemInfo.memory}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">화면</span>
+            <span className="info-value">
+              {window.screen.width}x{window.screen.height} ({window.devicePixelRatio}x)
+            </span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">방향</span>
+            <span className="info-value">{systemInfo.orientation}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
-} 
+};
+
+export default UserInfo; 

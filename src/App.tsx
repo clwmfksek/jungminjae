@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import "./App.css";
 import { supabase, CounterRecord } from "./lib/supabase";
 import { RealtimeChannel } from "@supabase/supabase-js";
@@ -6,7 +7,10 @@ import Chat from './components/Chat'
 import PasswordModal from './components/PasswordModal'
 import { createConfetti } from './utils/confetti';
 import UserInfo from './components/UserInfo';
+import Navigation from './components/Navigation';
+import ReactionGame from './components/ReactionGame';
 import { motion } from "framer-motion";
+import Counter from './components/Counter';
 
 // 테마 타입 정의
 type Theme = 'light' | 'dark';
@@ -14,6 +18,17 @@ type Theme = 'light' | 'dark';
 interface PersonCount {
   name: string;
   count: number;
+}
+
+// ScrollToTop 컴포넌트 추가
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
 }
 
 function App() {
@@ -235,6 +250,10 @@ function App() {
     }
   };
 
+  const handleReset = () => {
+    setIsResetModalOpen(true);
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -250,73 +269,60 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      <UserInfo />
-      <div className="counter-section">
-        <div className="header-controls">
-          <h1>날먹 카운터</h1>
-          <button onClick={toggleTheme} className="theme-toggle">
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
+    <Router>
+      <ScrollToTop />
+      <div className="app-container">
+        <Navigation theme={theme} toggleTheme={toggleTheme} />
+        <div className="content-container">
+          <Routes>
+            <Route path="/" element={
+              <Counter 
+                count={people[0].count}
+                onIncrement={() => incrementCount(0)}
+                onReset={handleReset}
+                error={error}
+              />
+            } />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/game" element={<ReactionGame />} />
+          </Routes>
         </div>
-        {error && (
-          <div style={{ 
-            color: 'red', 
-            margin: '10px', 
-            padding: '10px', 
-            border: '1px solid red',
-            borderRadius: '4px'
-          }}>
-            에러: {error}
-          </div>
-        )}
-        <div className="count-display">{people[0].count}회</div>
-        <div className="button-container">
-          <button onClick={() => incrementCount(0)} className="increment-button">
-            날먹하기
-          </button>
-          <button onClick={() => setIsResetModalOpen(true)} className="reset-button">
-            리셋
-          </button>
+        
+        <div className="confetti-container">
+          {confetti.map(conf => (
+            <motion.div
+              key={conf.id}
+              className={`confetti ${conf.type}`}
+              style={{
+                backgroundColor: conf.color,
+                left: conf.x,
+                top: conf.y,
+                rotate: conf.rotation,
+              }}
+              initial={{ opacity: 1 }}
+              animate={{
+                x: conf.tx,
+                y: conf.ty,
+                opacity: 0,
+              }}
+              transition={{
+                duration: 1,
+                ease: "easeOut",
+              }}
+              onAnimationComplete={() => {
+                setConfetti(prev => prev.filter(c => c.id !== conf.id));
+              }}
+            />
+          ))}
         </div>
+        <PasswordModal
+          isOpen={isResetModalOpen}
+          onClose={() => setIsResetModalOpen(false)}
+          onSubmit={resetCount}
+          title="리셋 비밀번호 입력"
+        />
       </div>
-      
-      <Chat />
-      
-      <div className="confetti-container">
-        {confetti.map(conf => (
-          <motion.div
-            key={conf.id}
-            className={`confetti ${conf.type}`}
-            style={{
-              backgroundColor: conf.color,
-              left: conf.x,
-              top: conf.y,
-              rotate: conf.rotation,
-            }}
-            initial={{ opacity: 1 }}
-            animate={{
-              x: conf.tx,
-              y: conf.ty,
-              opacity: 0,
-            }}
-            transition={{
-              duration: 1,
-              ease: "easeOut",
-            }}
-            onAnimationComplete={() => {
-              setConfetti(prev => prev.filter(c => c.id !== conf.id));
-            }}
-          />
-        ))}
-      </div>
-      <PasswordModal
-        isOpen={isResetModalOpen}
-        onClose={() => setIsResetModalOpen(false)}
-        onSubmit={resetCount}
-        title="리셋 비밀번호 입력"
-      />
-    </div>
+    </Router>
   );
 }
 
