@@ -2,33 +2,33 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 64px);
-  padding: 20px;
-  background-color: var(--bg-primary);
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
 .login-box {
-  background-color: var(--bg-secondary);
+  background: white;
   padding: 2rem;
-  border-radius: 16px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  max-width: 400px;
+  border-radius: 1rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   width: 100%;
+  max-width: 400px;
+  text-align: center;
+  animation: fadeIn 0.5s ease-out;
 }
 
 .login-box h1 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  color: #333;
   margin-bottom: 1rem;
+  font-size: 2rem;
+  font-weight: 600;
 }
 
 .login-description {
-  color: var(--text-secondary);
+  color: #666;
   margin-bottom: 2rem;
-  font-size: 0.95rem;
   line-height: 1.5;
+  font-size: 1rem;
 }
 
 .kakao-login-button {
@@ -37,6 +37,8 @@
   padding: 0;
   cursor: pointer;
   transition: transform 0.2s ease;
+  display: block;
+  margin: 0 auto;
 }
 
 .kakao-login-button:hover {
@@ -49,8 +51,42 @@
 }
 
 .loading {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
+  color: #666;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.loading::after {
+  content: '';
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ddd;
+  border-top: 2px solid #666;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* 모바일 최적화 */

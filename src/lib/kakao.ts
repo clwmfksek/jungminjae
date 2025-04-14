@@ -23,6 +23,7 @@ export const initializeKakao = () => {
 export const loginWithKakao = (): Promise<KakaoUser> => {
   return new Promise((resolve, reject) => {
     window.Kakao.Auth.login({
+      redirectUri: `${window.location.origin}/auth/callback/kakao`,
       success: () => {
         window.Kakao.API.request({
           url: '/v2/user/me',
