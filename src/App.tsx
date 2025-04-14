@@ -5,6 +5,7 @@ import { RealtimeChannel } from "@supabase/supabase-js";
 import Chat from './components/Chat'
 import PasswordModal from './components/PasswordModal'
 import { createConfetti } from './utils/confetti';
+import UserInfo from './components/UserInfo';
 
 // 테마 타입 정의
 type Theme = 'light' | 'dark';
@@ -240,6 +241,7 @@ function App() {
 
   return (
     <div className="app-container">
+      <UserInfo />
       <div className="counter-section">
         <div className="header-controls">
           <h1>날먹 카운터</h1>
