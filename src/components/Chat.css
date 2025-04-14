@@ -75,6 +75,18 @@
   font-size: 0.95rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   max-width: 85%;
+  animation: message-appear 0.3s ease-out;
+}
+
+@keyframes message-appear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-message strong {
@@ -263,6 +275,7 @@
 
   .chat-messages {
     padding: 12px;
+    flex-direction: column;
   }
 
   .chat-form {

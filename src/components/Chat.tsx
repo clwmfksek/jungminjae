@@ -71,14 +71,11 @@ export default function Chat() {
       if (error) throw error;
       
       if (data) {
-        setMessages(prev => [...prev, ...data]);
+        const typedData = data as Message[];
+        setMessages(prev => [...prev, ...typedData].sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ));
         setHasMore(data.length === MESSAGES_PER_PAGE);
-        // 메시지 로딩 완료 후 스크롤을 맨 아래로 이동
-        setTimeout(() => {
-          if (chatMessagesRef.current) {
-            chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
-          }
-        }, 100);
       }
     } catch (error) {
       console.error('메시지 로딩 중 오류:', error);
@@ -86,6 +83,34 @@ export default function Chat() {
       setIsLoading(false);
     }
   }, [messages.length, isLoading, hasMore]);
+
+  // 새 메시지 수신 시 처리
+  useEffect(() => {
+    const channel = supabase
+      .channel('messages-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        },
+        (payload) => {
+          const newMessage = payload.new as Message;
+          setMessages(prev => [...prev, newMessage].sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          ));
+          if (shouldScrollToBottom) {
+            setTimeout(scrollToBottom, 100);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [shouldScrollToBottom, scrollToBottom]);
 
   // 스크롤 이벤트 핸들러 추가
   useEffect(() => {
