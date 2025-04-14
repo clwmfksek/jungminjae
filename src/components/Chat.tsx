@@ -270,12 +270,19 @@ export default function Chat() {
         <div className="chat-header-content">
           <h2>실시간 채팅</h2>
           <div className="chat-controls">
-            <span className={`connection-status ${connectionStatus === '연결됨' ? 'connected' : connectionStatus === '연결 끊김' ? 'disconnected' : ''}`}>
+            <span className={`connection-status ${
+              connectionStatus === '연결됨' 
+                ? 'connected' 
+                : connectionStatus === '연결 끊김' 
+                  ? 'disconnected' 
+                  : ''
+            }`}>
               {connectionStatus}
             </span>
             <button 
               onClick={() => setIsResetModalOpen(true)}
               className="chat-reset-button"
+              aria-label="채팅 초기화"
             >
               채팅 초기화
             </button>
@@ -287,8 +294,14 @@ export default function Chat() {
           {isLoading && <div className="loading">메시지 불러오는 중...</div>}
         </div>
         {messages.map((message) => (
-          <div key={message.id} className="chat-message">
-            <strong>{message.user_name}:</strong> {message.content}
+          <div 
+            key={message.id} 
+            className={`chat-message ${
+              message.user_name === userName ? 'own-message' : ''
+            }`}
+          >
+            <strong>{message.user_name}</strong>
+            {message.content}
             <span className="message-time">
               {new Date(message.created_at).toLocaleTimeString()}
             </span>
@@ -301,19 +314,22 @@ export default function Chat() {
           type="text"
           value={userName}
           onChange={(e) => setUserName(e.target.value)}
-          placeholder="이름을 입력하세요"
-          className="chat-input name-input"
+          placeholder="이름"
+          className="chat-input"
           required
+          maxLength={20}
         />
         <input
           type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="메시지를 입력하세요"
-          className="chat-input message-input"
+          className="chat-input"
           required
         />
-        <button type="submit" className="chat-submit">전송</button>
+        <button type="submit" className="chat-submit">
+          전송
+        </button>
       </form>
       <PasswordModal
         isOpen={isResetModalOpen}
