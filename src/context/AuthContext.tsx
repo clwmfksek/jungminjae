@@ -108,16 +108,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       
+      // 카카오 토큰 요청
       const params = new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: import.meta.env.VITE_KAKAO_CLIENT_ID,
         redirect_uri: import.meta.env.VITE_KAKAO_REDIRECT_URI,
         code: code,
+        client_secret: import.meta.env.VITE_KAKAO_CLIENT_SECRET
       });
-
-      if (import.meta.env.VITE_KAKAO_CLIENT_SECRET) {
-        params.append('client_secret', import.meta.env.VITE_KAKAO_CLIENT_SECRET);
-      }
 
       const tokenResponse = await fetch('https://kauth.kakao.com/oauth/token', {
         method: 'POST',
@@ -135,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const tokenData = await tokenResponse.json();
 
+      // 카카오 사용자 정보 요청
       const userResponse = await fetch('https://kapi.kakao.com/v2/user/me', {
         headers: {
           Authorization: `Bearer ${tokenData.access_token}`,
@@ -146,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('사용자 정보 가져오기 실패');
       }
 
-      const userData = (await userResponse.json()) as KakaoAPIUser;
+      const userData = await userResponse.json();
       const defaultProfileImage = `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y`;
       
       const user: KakaoUser = {
@@ -164,22 +163,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
-      try {
-        const { error: upsertError } = await supabase
-          .from('users')
-          .upsert({
-            kakao_id: user.id,
-            nickname: user.properties.nickname,
-            profile_image: user.properties.profile_image,
-            last_login: new Date().toISOString()
-          }, {
-            onConflict: 'kakao_id'
-          });
+      // Supabase에 사용자 정보 저장
+      const { error: upsertError } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          kakao_id: user.id,
+          nickname: user.properties.nickname,
+          profile_image: user.properties.profile_image,
+          last_login: new Date().toISOString()
+        }, {
+          onConflict: 'kakao_id'
+        });
 
-        if (upsertError) throw upsertError;
-      } catch (error) {
-        // Supabase 에러는 무시하고 로그인 진행
-      }
+      if (upsertError) throw upsertError;
 
       localStorage.setItem('kakao_user', JSON.stringify(user));
       dispatch({ type: 'SET_USER', payload: user });

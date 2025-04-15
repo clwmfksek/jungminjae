@@ -26,12 +26,10 @@ const Login = () => {
   const handleLogin = async () => {
     try {
       setIsLoading(true);
-      const userData = await loginWithKakao();
-      await login(userData);
-      navigate(-1);
+      await loginWithKakao();
+      // 리다이렉트되므로 더 이상의 코드는 실행되지 않습니다.
     } catch (error) {
       console.error('Login failed:', error);
-    } finally {
       setIsLoading(false);
     }
   };

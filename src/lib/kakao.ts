@@ -21,32 +21,16 @@ export const initializeKakao = () => {
 };
 
 // 카카오 로그인
-export const loginWithKakao = (): Promise<KakaoUser> => {
+export const loginWithKakao = (): Promise<void> => {
   return new Promise((resolve, reject) => {
     if (!window.Kakao) {
       reject(new Error('카카오 SDK가 로드되지 않았습니다.'));
       return;
     }
 
-    window.Kakao.Auth.login({
+    window.Kakao.Auth.authorize({
       redirectUri: import.meta.env.VITE_KAKAO_REDIRECT_URI,
-      success: () => {
-        window.Kakao.API.request({
-          url: '/v2/user/me',
-          success: (res: KakaoUser) => {
-            console.log('카카오 사용자 정보 조회 성공:', res);
-            resolve(res);
-          },
-          fail: (error: any) => {
-            console.error('카카오 사용자 정보 조회 실패:', error);
-            reject(error);
-          },
-        });
-      },
-      fail: (error: any) => {
-        console.error('카카오 로그인 실패:', error);
-        reject(error);
-      },
+      scope: 'profile_nickname'
     });
   });
 };
