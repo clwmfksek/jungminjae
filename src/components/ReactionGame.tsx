@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import './ReactionGame.css';
 
 interface GameState {
@@ -34,6 +35,7 @@ const REACTION_GRADES = {
 
 const ReactionGame = () => {
   const navigate = useNavigate();
+  const { state } = useAuth();
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
   const [records, setRecords] = useState<number[]>(() => {
     const savedRecords = localStorage.getItem('reactionGameRecords');
@@ -46,17 +48,11 @@ const ReactionGame = () => {
   const [reactionClass, setReactionClass] = useState<string>('');
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/login');
-        return;
-      }
-      setGameState(prev => ({ ...prev, userId: session.user.id }));
-    };
-    
-    checkAuth();
-  }, [navigate]);
+    const userId = state.user?.id;
+    if (userId) {
+      setGameState(prev => ({ ...prev, userId }));
+    }
+  }, [state.user]);
 
   // 게임 시작 핸들러
   const startGame = useCallback(() => {
@@ -119,16 +115,25 @@ const ReactionGame = () => {
       // 2초 후 클래스 제거
       setTimeout(() => setReactionClass(''), 2000);
 
+      // 게임 기록 저장
       if (gameState.userId) {
-        await supabase
-          .from('game_records')
-          .insert([
-            {
-              user_id: gameState.userId,
-              reaction_time: reactionTime,
-              is_high_score: !bestRecord || reactionTime < bestRecord
-            }
-          ]);
+        try {
+          const { error } = await supabase
+            .from('game_records')
+            .insert([
+              {
+                user_id: gameState.userId,
+                reaction_time: reactionTime,
+                is_high_score: !bestRecord || reactionTime < bestRecord
+              }
+            ]);
+
+          if (error) {
+            console.error('기록 저장 실패:', error);
+          }
+        } catch (error) {
+          console.error('기록 저장 중 오류 발생:', error);
+        }
       }
     } else if (gameState.state === 'ready') {
       setGameState({

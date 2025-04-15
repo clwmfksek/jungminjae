@@ -8,6 +8,10 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { state } = useAuth();
   
+  if (state.loading) {
+    return <div>로딩 중...</div>;
+  }
+
   if (!state.user) {
     return <Navigate to="/login" replace />;
   }

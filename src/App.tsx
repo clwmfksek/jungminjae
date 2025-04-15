@@ -10,6 +10,9 @@ import KakaoCallback from './components/KakaoCallback';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicOnlyRoute from './components/PublicOnlyRoute';
+import Home from './components/Home';
+import Count from './components/Count';
+import Profile from './components/Profile';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -39,7 +42,7 @@ function App() {
         <Routes>
           <Route path="/" element={
             <ProtectedRoute>
-              <ReactionGame />
+              <Home />
             </ProtectedRoute>
           } />
           <Route path="/game" element={
@@ -50,6 +53,16 @@ function App() {
           <Route path="/chat" element={
             <ProtectedRoute>
               <Chat />
+            </ProtectedRoute>
+          } />
+          <Route path="/count" element={
+            <ProtectedRoute>
+              <Count />
+            </ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           } />
           <Route path="/login" element={

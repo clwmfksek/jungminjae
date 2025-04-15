@@ -1,10 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import UserInfo from './UserInfo';
+import PasswordModal from './PasswordModal';
 import './Profile.css';
 
 const Profile = () => {
   const { state } = useAuth();
   const user = state.user;
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  const handlePasswordSubmit = (password: string) => {
+    // 비밀번호 변경 로직 구현
+    console.log('새 비밀번호:', password);
+    setShowPasswordModal(false);
+  };
 
   if (!user) {
     return (
@@ -28,36 +37,23 @@ const Profile = () => {
           <h2>{user.properties.nickname}</h2>
         </div>
         
-        <div className="profile-info">
-          <div className="info-item">
-            <label>닉네임</label>
-            <span>{user.properties.nickname}</span>
-          </div>
-          <div className="info-item">
-            <label>가입일</label>
-            <span>{new Date().toLocaleDateString()}</span>
-          </div>
+        <UserInfo />
+        
+        <div className="profile-actions">
+          <button 
+            className="password-change-button"
+            onClick={() => setShowPasswordModal(true)}
+          >
+            비밀번호 변경
+          </button>
         </div>
 
-        <div className="profile-stats">
-          <div className="stats-item">
-            <h3>게임 기록</h3>
-            <div className="stats-grid">
-              <div className="stat">
-                <label>최고 반응 속도</label>
-                <span>0.000초</span>
-              </div>
-              <div className="stat">
-                <label>평균 반응 속도</label>
-                <span>0.000초</span>
-              </div>
-              <div className="stat">
-                <label>총 게임 수</label>
-                <span>0회</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PasswordModal
+          isOpen={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+          onSubmit={handlePasswordSubmit}
+          title="비밀번호 변경"
+        />
       </div>
     </div>
   );

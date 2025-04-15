@@ -91,8 +91,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (savedUser) {
         try {
           const parsedUser = JSON.parse(savedUser);
-          dispatch({ type: 'SET_USER', payload: parsedUser });
+          // 토큰이 있는지 확인
+          if (parsedUser.token && parsedUser.token.access_token) {
+            dispatch({ type: 'SET_USER', payload: parsedUser });
+          } else {
+            localStorage.removeItem('kakao_user');
+            dispatch({ type: 'SET_LOADING', payload: false });
+          }
         } catch (error) {
+          console.error('사용자 정보 파싱 실패:', error);
           localStorage.removeItem('kakao_user');
           dispatch({ type: 'SET_LOADING', payload: false });
         }
@@ -183,8 +190,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw upsertError;
       }
 
+      // 사용자 정보를 localStorage에 저장
       localStorage.setItem('kakao_user', JSON.stringify(user));
       dispatch({ type: 'SET_USER', payload: user });
+      dispatch({ type: 'SET_LOADING', payload: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '로그인 실패';
       console.error('로그인 처리 중 에러:', error);
