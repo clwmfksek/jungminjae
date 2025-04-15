@@ -9,6 +9,13 @@ export interface KakaoUser {
   properties: {
     nickname: string;
     profile_image: string;
+    thumbnail_image: string;
+  };
+  token?: {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    refresh_token_expires_in: number;
   };
 }
 
@@ -28,8 +35,14 @@ export const loginWithKakao = (): Promise<void> => {
       return;
     }
 
+    const redirectUri = import.meta.env.VITE_KAKAO_REDIRECT_URI;
+    if (!redirectUri) {
+      reject(new Error('리다이렉트 URI가 설정되지 않았습니다.'));
+      return;
+    }
+
     window.Kakao.Auth.authorize({
-      redirectUri: import.meta.env.VITE_KAKAO_REDIRECT_URI,
+      redirectUri: redirectUri,
       scope: 'profile_nickname'
     });
   });

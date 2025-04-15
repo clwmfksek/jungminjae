@@ -20,10 +20,11 @@ const KakaoCallback: React.FC = () => {
       try {
         const code = searchParams.get('code');
         const error = searchParams.get('error');
+        const errorDescription = searchParams.get('error_description');
 
         if (error) {
-          console.error('카카오 로그인 에러:', error);
-          throw new Error('카카오 로그인 중 오류가 발생했습니다.');
+          console.error('카카오 로그인 에러:', error, errorDescription);
+          throw new Error(errorDescription || '카카오 로그인 중 오류가 발생했습니다.');
         }
 
         if (!code) {
@@ -51,6 +52,7 @@ const KakaoCallback: React.FC = () => {
     <div className="loading-container">
       <div className="loading-spinner" />
       <p>로그인 처리 중입니다...</p>
+      <p className="loading-subtext">잠시만 기다려주세요</p>
     </div>
   );
 };

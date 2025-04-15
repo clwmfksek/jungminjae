@@ -128,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!tokenResponse.ok) {
         const tokenData = await tokenResponse.json();
+        console.error('카카오 토큰 요청 실패:', tokenData);
         throw new Error(tokenData.error_description || '토큰 받기 실패');
       }
 
@@ -142,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!userResponse.ok) {
+        console.error('카카오 사용자 정보 요청 실패:', await userResponse.json());
         throw new Error('사용자 정보 가져오기 실패');
       }
 
@@ -176,12 +178,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           onConflict: 'kakao_id'
         });
 
-      if (upsertError) throw upsertError;
+      if (upsertError) {
+        console.error('Supabase 사용자 정보 저장 실패:', upsertError);
+        throw upsertError;
+      }
 
       localStorage.setItem('kakao_user', JSON.stringify(user));
       dispatch({ type: 'SET_USER', payload: user });
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '로그인 실패' });
+      const errorMessage = error instanceof Error ? error.message : '로그인 실패';
+      console.error('로그인 처리 중 에러:', error);
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
       throw error;
     }
   };
