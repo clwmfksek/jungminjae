@@ -1,114 +1,132 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
-import { FaSpinner, FaExclamationCircle } from 'react-icons/fa';
-import './GameStats.css';
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
+import { GameRecord } from "../types/game";
+import { useAuth } from "../context/AuthContext";
+import { FaSpinner, FaExclamationCircle } from "react-icons/fa";
+import "./GameStats.css";
 
-interface GameRecord {
-  id: string;
-  user_id: string;
-  reaction_time: number;
-  created_at: string;
-  user: {
-    id: string;
-    properties: {
-      nickname: string;
-      profile_image: string;
-    };
-  };
+interface Stats {
+  bestRecord: number | null;
+  averageTime: number | null;
+  totalGames: number;
 }
 
-const GameStats = () => {
+interface DatabaseRecord {
+  id: string;
+  reaction_time: number;
+  is_high_score: boolean;
+  created_at: string;
+  user_id: string;
+}
+
+export default function GameStats() {
   const { state } = useAuth();
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<Stats>({
+    bestRecord: null,
+    averageTime: null,
+    totalGames: 0,
+  });
 
-  useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('game_records')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(100);
+  const fetchRecords = async () => {
+    try {
+      if (!state.user?.supabaseId) return;
 
-        if (error) throw error;
-        setRecords(data || []);
-      } catch (err) {
-        setError('기록을 불러오는데 실패했습니다.');
-        console.error('Error fetching records:', err);
-      } finally {
-        setLoading(false);
+      const { data, error } = await supabase
+        .from("game_records")
+        .select("id, reaction_time, is_high_score, created_at, user_id")
+        .eq("user_id", state.user.supabaseId)
+        .order("reaction_time", { ascending: true });
+
+      if (error) throw error;
+
+      const formattedRecords: GameRecord[] = (data as DatabaseRecord[]).map(
+        (record) => ({
+          id: record.id,
+          reactionTime: record.reaction_time,
+          isHighScore: record.is_high_score,
+          createdAt: new Date(record.created_at),
+          nickname: state.user?.properties.nickname || "Unknown",
+          profileImage:
+            state.user?.properties.profile_image || "/default-profile.png",
+        })
+      );
+
+      setRecords(formattedRecords);
+      setLoading(false);
+      setError(null);
+
+      // Calculate stats
+      if (formattedRecords.length > 0) {
+        const bestRecord = formattedRecords[0].reactionTime;
+        const totalTime = formattedRecords.reduce(
+          (sum, record) => sum + record.reactionTime,
+          0
+        );
+        const averageTime = totalTime / formattedRecords.length;
+
+        setStats({
+          bestRecord,
+          averageTime,
+          totalGames: formattedRecords.length,
+        });
       }
-    };
-
-    fetchRecords();
-  }, []);
-
-  const calculateStats = () => {
-    if (records.length === 0) return null;
-
-    const userRecords = records.filter(record => record.user_id === state.user?.id);
-    const bestRecord = Math.min(...records.map(record => record.reaction_time));
-    const averageTime = records.reduce((acc, record) => acc + record.reaction_time, 0) / records.length;
-    const totalGames = records.length;
-
-    return {
-      bestRecord,
-      averageTime,
-      totalGames,
-      userBestRecord: userRecords.length > 0 ? Math.min(...userRecords.map(record => record.reaction_time)) : null,
-      userAverageTime: userRecords.length > 0 ? userRecords.reduce((acc, record) => acc + record.reaction_time, 0) / userRecords.length : null,
-      userTotalGames: userRecords.length
-    };
+    } catch (error) {
+      console.error("Error fetching records:", error);
+      setLoading(false);
+      setError("게임 기록을 불러오는데 실패했습니다.");
+    }
   };
 
-  const stats = calculateStats();
+  useEffect(() => {
+    fetchRecords();
+  }, [state.user?.supabaseId]);
 
   if (loading) {
     return (
-      <div className="stats-container">
-        <div className="loading">
-          <div className="loading-spinner" />
-          <p>통계를 불러오는 중...</p>
-        </div>
+      <div className="loading-container">
+        <FaSpinner className="spinner" />
+        <p>게임 기록을 불러오는 중...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="stats-container">
-        <div className="error">
-          <FaExclamationCircle className="error-icon" />
-          <p>통계를 불러오는 중 오류가 발생했습니다.</p>
-        </div>
+      <div className="error-container">
+        <FaExclamationCircle className="error-icon" />
+        <p>{error}</p>
       </div>
     );
   }
 
   return (
     <div className="stats-container">
-      <h1>게임 통계</h1>
-      
+      <h2 className="stats-title">전체 통계</h2>
       <div className="stats-grid">
         <div className="stat-card">
           <h3>전체 최고 기록</h3>
-          <p className="stat-value">{stats?.bestRecord.toFixed(3)}</p>
-          <span className="stat-unit">초</span>
+          <p className="stat-value">
+            {stats.bestRecord
+              ? `${stats.bestRecord.toFixed(2)}ms`
+              : "기록 없음"}
+          </p>
         </div>
-        
+
         <div className="stat-card">
           <h3>전체 평균</h3>
-          <p className="stat-value">{stats?.averageTime.toFixed(3)}</p>
-          <span className="stat-unit">초</span>
+          <p className="stat-value">
+            {stats.averageTime
+              ? `${stats.averageTime.toFixed(2)}ms`
+              : "기록 없음"}
+          </p>
         </div>
-        
+
         <div className="stat-card">
           <h3>총 게임 수</h3>
-          <p className="stat-value">{stats?.totalGames}</p>
-          <span className="stat-unit">회</span>
+          <p className="stat-value">{stats.totalGames}</p>
         </div>
       </div>
 
@@ -118,46 +136,50 @@ const GameStats = () => {
           <div className="stats-grid">
             <div className="stat-card">
               <h3>나의 최고 기록</h3>
-              <p className="stat-value">{stats?.userBestRecord ? stats.userBestRecord.toFixed(3) : '-'}</p>
-              <span className="stat-unit">초</span>
+              <p className="stat-value">
+                {stats.bestRecord
+                  ? `${stats.bestRecord.toFixed(2)}ms`
+                  : "기록 없음"}
+              </p>
             </div>
-            
+
             <div className="stat-card">
               <h3>나의 평균</h3>
-              <p className="stat-value">{stats?.userAverageTime ? stats.userAverageTime.toFixed(3) : '-'}</p>
-              <span className="stat-unit">초</span>
+              <p className="stat-value">
+                {stats.averageTime
+                  ? `${stats.averageTime.toFixed(2)}ms`
+                  : "기록 없음"}
+              </p>
             </div>
-            
+
             <div className="stat-card">
               <h3>나의 게임 수</h3>
-              <p className="stat-value">{stats?.userTotalGames || 0}</p>
-              <span className="stat-unit">회</span>
+              <p className="stat-value">{stats.totalGames}</p>
             </div>
           </div>
         </>
       )}
 
-      <div className="recent-records">
+      <div className="records-list">
         <h2>최근 기록</h2>
-        <div className="records-list">
-          {records.map(record => (
-            <div key={record.id} className="record-item">
-              <div className="record-info">
-                <span className="record-time">{record.reaction_time.toFixed(3)}초</span>
-                <div className="record-user">
-                  <img src={record.user?.properties?.profile_image} alt="프로필" />
-                  <span>{record.user?.properties?.nickname}</span>
-                </div>
-              </div>
-              <span className="record-date">
-                {new Date(record.created_at).toLocaleString()}
+        {records.map((record) => (
+          <div key={record.id} className="record-item">
+            <div className="record-info">
+              <span className="record-time">
+                {record.reactionTime.toFixed(2)}ms
               </span>
+              <div className="record-user">
+                <img
+                  src={record.profileImage}
+                  alt={`${record.nickname}의 프로필`}
+                  className="profile-image"
+                />
+                <span>{record.nickname}</span>
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );
-};
-
-export default GameStats; 
+}
