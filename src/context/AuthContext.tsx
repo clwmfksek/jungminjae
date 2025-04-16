@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseAdmin } from "../lib/supabase";
 
 interface KakaoAPIUser {
   id: number;
@@ -171,8 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const kakaoUserData: KakaoAPIUser = await userResponse.json();
       const defaultProfileImage = `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y`;
 
-      // Supabase를 통해 사용자 정보 저장
-      const { data, error: upsertError } = await supabase
+      // Supabase를 통해 사용자 정보 저장 (서비스 클라이언트 사용)
+      const { data, error: upsertError } = await supabaseAdmin
         .rpc("upsert_user", {
           p_kakao_id: kakaoUserData.id.toString(),
           p_nickname: kakaoUserData.properties.nickname || "사용자",
@@ -200,26 +200,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("사용자 정보를 찾을 수 없습니다.");
       }
 
-      // Supabase 세션 설정
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.signInWithPassword({
-          email: `${userData.id}@kakao.user`,
-          password: userData.kakao_id,
-        });
-
-      if (sessionError) {
-        // 세션 생성 실패 시 회원가입 시도
-        const { data: signUpData, error: signUpError } =
-          await supabase.auth.signUp({
-            email: `${userData.id}@kakao.user`,
-            password: userData.kakao_id,
-          });
-
-        if (signUpError) {
-          console.error("Supabase 인증 실패:", signUpError);
-          throw new Error("인증에 실패했습니다.");
-        }
-      }
+      // Supabase 클라이언트에 JWT 토큰 설정
+      supabase.auth.setSession({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+      });
 
       const user: KakaoUser = {
         id: userData.id,
