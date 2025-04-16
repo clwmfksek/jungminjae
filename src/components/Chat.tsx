@@ -272,7 +272,7 @@ export default function Chat() {
       const { error: deleteError } = await supabase
         .from("messages")
         .delete()
-        .gt("id", "0"); // 모든 레코드 선택
+        .neq("id", "00000000-0000-0000-0000-000000000000"); // 모든 레코드를 안전하게 선택
 
       if (deleteError) {
         console.error("삭제 에러:", deleteError);
@@ -286,17 +286,19 @@ export default function Chat() {
       setError(null);
 
       // 다른 클라이언트들에게 초기화 알림
-      const channel = supabase.channel("chat_reset");
-      await channel.subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          await channel.send({
-            type: "broadcast",
-            event: "chat_reset",
-            payload: { timestamp: new Date().toISOString() },
-          });
-          channel.unsubscribe();
-        }
-      });
+      try {
+        const channel = supabase.channel("chat_reset");
+        await channel.subscribe();
+        await channel.send({
+          type: "broadcast",
+          event: "chat_reset",
+          payload: { timestamp: new Date().toISOString() },
+        });
+        await channel.unsubscribe();
+      } catch (broadcastError) {
+        console.error("브로드캐스트 전송 실패:", broadcastError);
+        // 브로드캐스트 실패는 치명적이지 않으므로 에러를 던지지 않음
+      }
     } catch (error: any) {
       console.error("채팅 초기화 중 오류:", error);
       setError(
@@ -311,12 +313,16 @@ export default function Chat() {
     const resetChannel = supabase.channel("chat_reset");
 
     resetChannel
-      .on("broadcast", { event: "chat_reset" }, () => {
+      .on("broadcast", { event: "chat_reset" }, (payload) => {
         // 다른 클라이언트에서 초기화가 발생했을 때
+        console.log("채팅 초기화 이벤트 수신:", payload);
         setMessages([]);
         messageCache.current.clear();
+        setError(null);
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("채팅 초기화 채널 상태:", status);
+      });
 
     return () => {
       resetChannel.unsubscribe();

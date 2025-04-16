@@ -1,5 +1,5 @@
 :root {
-  --accent-color: #4A90E2;
+  --accent-color: #4a90e2;
   --accent-color-rgb: 74, 144, 226;
   --bg-primary: #ffffff;
   --bg-secondary: #f8f9fa;
@@ -9,7 +9,7 @@
   --card-background: #ffffff;
   --background-color: #ffffff;
   --text-color: #1a1a1a;
-  --primary-color: #4A90E2;
+  --primary-color: #4a90e2;
   --primary-color-dark: #3a75c2;
   --secondary-color: #f8f9fa;
   --background-secondary: #f8f9fa;
@@ -387,4 +387,4 @@
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-secondary);
-} 
+}
