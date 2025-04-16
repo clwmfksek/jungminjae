@@ -9,7 +9,6 @@ interface GameState {
   message: string;
   startTime: number;
   endTime: number;
-  userId: string | null;
 }
 
 const INITIAL_STATE: GameState = {
@@ -17,7 +16,6 @@ const INITIAL_STATE: GameState = {
   message: "시작하려면 클릭하세요",
   startTime: 0,
   endTime: 0,
-  userId: null,
 };
 
 const COLORS = {
@@ -46,13 +44,6 @@ const ReactionGame = () => {
     return savedBest ? Number(savedBest) : null;
   });
   const [reactionClass, setReactionClass] = useState<string>("");
-
-  useEffect(() => {
-    const userId = state.user?.supabaseId;
-    if (userId) {
-      setGameState((prev) => ({ ...prev, userId }));
-    }
-  }, [state.user]);
 
   // 게임 시작 핸들러
   const startGame = useCallback(() => {
@@ -119,11 +110,12 @@ const ReactionGame = () => {
       setTimeout(() => setReactionClass(""), 2000);
 
       // 게임 기록 저장
-      if (gameState.userId) {
+      const userId = state.user?.supabaseId;
+      if (userId) {
         try {
           const { error } = await supabase.from("game_records").insert([
             {
-              user_id: state.user?.supabaseId,
+              user_id: userId,
               reaction_time: reactionTime,
               is_high_score: !bestRecord || reactionTime < bestRecord,
             },
@@ -142,7 +134,12 @@ const ReactionGame = () => {
         message: "너무 일찍 클릭했습니다! 다시 시도하려면 클릭하세요.",
       });
     }
-  }, [gameState.state, gameState.startTime, bestRecord, gameState.userId]);
+  }, [
+    gameState.state,
+    gameState.startTime,
+    bestRecord,
+    state.user?.supabaseId,
+  ]);
 
   // 키보드 이벤트 핸들러
   useEffect(() => {

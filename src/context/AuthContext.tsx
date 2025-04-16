@@ -15,9 +15,22 @@ interface KakaoAPIUser {
   };
 }
 
+interface SupabaseUser {
+  id: string;
+  kakao_id: string;
+  nickname: string;
+  profile_image: string;
+  last_login: string;
+  access_token: string;
+  refresh_token: string;
+  token_expires_at: string;
+  refresh_token_expires_at: string;
+}
+
 interface KakaoUser {
-  id: string; // kakao id
-  supabaseId: string; // supabase uuid
+  id: string;
+  kakaoId: number; // 카카오 원본 ID를 별도로 저장
+  supabaseId: string;
   properties: {
     nickname: string;
     profile_image: string;
@@ -28,6 +41,7 @@ interface KakaoUser {
     refresh_token: string;
     expires_in: number;
     refresh_token_expires_in: number;
+    issued_at: number; // 토큰 발급 시간 추가
   };
 }
 
@@ -115,29 +129,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (code: string) => {
     try {
       dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_ERROR", payload: null });
 
       // 카카오 토큰 요청
-      const params = new URLSearchParams({
-        grant_type: "authorization_code",
-        client_id: import.meta.env.VITE_KAKAO_CLIENT_ID,
-        redirect_uri: import.meta.env.VITE_KAKAO_REDIRECT_URI,
-        code: code,
-        client_secret: import.meta.env.VITE_KAKAO_CLIENT_SECRET,
-      });
-
       const tokenResponse = await fetch("https://kauth.kakao.com/oauth/token", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           Accept: "application/json",
         },
-        body: params.toString(),
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: import.meta.env.VITE_KAKAO_CLIENT_ID,
+          redirect_uri: import.meta.env.VITE_KAKAO_REDIRECT_URI,
+          code: code,
+          client_secret: import.meta.env.VITE_KAKAO_CLIENT_SECRET,
+        }).toString(),
       });
 
       if (!tokenResponse.ok) {
-        const tokenData = await tokenResponse.json();
-        console.error("카카오 토큰 요청 실패:", tokenData);
-        throw new Error(tokenData.error_description || "토큰 받기 실패");
+        const errorData = await tokenResponse.json();
+        throw new Error(
+          errorData.error_description || "카카오 로그인에 실패했습니다."
+        );
       }
 
       const tokenData = await tokenResponse.json();
@@ -151,19 +165,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!userResponse.ok) {
-        console.error(
-          "카카오 사용자 정보 요청 실패:",
-          await userResponse.json()
-        );
-        throw new Error("사용자 정보 가져오기 실패");
+        throw new Error("카카오 사용자 정보를 가져오는데 실패했습니다.");
       }
 
-      const kakaoUserData = await userResponse.json();
+      const kakaoUserData: KakaoAPIUser = await userResponse.json();
       const defaultProfileImage = `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y`;
 
+      // Supabase를 통해 사용자 정보 저장
+      const { data, error: upsertError } = await supabase
+        .rpc("upsert_user", {
+          p_kakao_id: kakaoUserData.id.toString(),
+          p_nickname: kakaoUserData.properties.nickname || "사용자",
+          p_profile_image:
+            kakaoUserData.properties.profile_image || defaultProfileImage,
+          p_access_token: tokenData.access_token,
+          p_refresh_token: tokenData.refresh_token,
+          p_token_expires_at: new Date(
+            Date.now() + tokenData.expires_in * 1000
+          ).toISOString(),
+          p_refresh_token_expires_at: new Date(
+            Date.now() + tokenData.refresh_token_expires_in * 1000
+          ).toISOString(),
+        })
+        .single();
+
+      if (upsertError) {
+        console.error("Supabase 사용자 정보 저장 실패:", upsertError);
+        throw new Error("사용자 정보 저장에 실패했습니다.");
+      }
+
+      const userData = data as SupabaseUser;
+
+      if (!userData) {
+        throw new Error("사용자 정보를 찾을 수 없습니다.");
+      }
+
       const user: KakaoUser = {
-        id: kakaoUserData.id.toString(),
-        supabaseId: "",
+        id: userData.id,
+        kakaoId: kakaoUserData.id,
+        supabaseId: userData.id,
         properties: {
           nickname: kakaoUserData.properties.nickname || "사용자",
           profile_image:
@@ -176,42 +216,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           refresh_token: tokenData.refresh_token,
           expires_in: tokenData.expires_in,
           refresh_token_expires_in: tokenData.refresh_token_expires_in,
+          issued_at: Date.now(),
         },
       };
 
-      // Supabase에 사용자 정보 저장
-      const { data: supabaseUserData, error: upsertError } = await supabase
-        .from("users")
-        .upsert(
-          {
-            id: user.id,
-            kakao_id: user.id,
-            nickname: user.properties.nickname,
-            profile_image: user.properties.profile_image,
-            last_login: new Date().toISOString(),
-          },
-          {
-            onConflict: "kakao_id",
-          }
-        )
-        .select()
-        .single();
+      // 사용자 정보를 localStorage에 저장 (토큰 제외)
+      const userForStorage = { ...user };
+      delete userForStorage.token;
+      localStorage.setItem("kakao_user", JSON.stringify(userForStorage));
 
-      if (upsertError) {
-        console.error("Supabase 사용자 정보 저장 실패:", upsertError);
-        throw upsertError;
-      }
+      // 토큰은 별도로 저장
+      sessionStorage.setItem("kakao_token", JSON.stringify(user.token));
 
-      // Supabase UUID를 사용자 정보에 추가
-      user.supabaseId = supabaseUserData.id;
-
-      // 사용자 정보를 localStorage에 저장
-      localStorage.setItem("kakao_user", JSON.stringify(user));
       dispatch({ type: "SET_USER", payload: user });
       dispatch({ type: "SET_LOADING", payload: false });
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "로그인 실패";
+        error instanceof Error
+          ? error.message
+          : "로그인 중 오류가 발생했습니다.";
       console.error("로그인 처리 중 에러:", error);
       dispatch({ type: "SET_ERROR", payload: errorMessage });
       throw error;
@@ -222,12 +245,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       dispatch({ type: "SET_LOADING", payload: true });
       localStorage.removeItem("kakao_user");
+      sessionStorage.removeItem("kakao_token");
       dispatch({ type: "LOGOUT" });
     } catch (error) {
-      dispatch({
-        type: "SET_ERROR",
-        payload: error instanceof Error ? error.message : "로그아웃 실패",
-      });
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "로그아웃 중 오류가 발생했습니다.";
+      dispatch({ type: "SET_ERROR", payload: errorMessage });
       throw error;
     }
   };
