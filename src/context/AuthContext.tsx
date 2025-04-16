@@ -200,6 +200,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("사용자 정보를 찾을 수 없습니다.");
       }
 
+      // Supabase 세션 설정
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.signInWithPassword({
+          email: `${userData.id}@kakao.user`,
+          password: userData.kakao_id,
+        });
+
+      if (sessionError) {
+        // 세션 생성 실패 시 회원가입 시도
+        const { data: signUpData, error: signUpError } =
+          await supabase.auth.signUp({
+            email: `${userData.id}@kakao.user`,
+            password: userData.kakao_id,
+          });
+
+        if (signUpError) {
+          console.error("Supabase 인증 실패:", signUpError);
+          throw new Error("인증에 실패했습니다.");
+        }
+      }
+
       const user: KakaoUser = {
         id: userData.id,
         kakaoId: kakaoUserData.id,
@@ -244,6 +265,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       dispatch({ type: "SET_LOADING", payload: true });
+
+      // Supabase 로그아웃
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) {
+        console.error("Supabase 로그아웃 실패:", signOutError);
+      }
+
       localStorage.removeItem("kakao_user");
       sessionStorage.removeItem("kakao_token");
       dispatch({ type: "LOGOUT" });
