@@ -37,7 +37,7 @@ export const getSupabase = () => {
 export const supabase = getSupabase();
 
 // 서비스 클라이언트 (인증을 우회해야 하는 작업에 사용)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+export const supabaseAdmin = supabase;
 
 // users 테이블 인터페이스 정의
 export interface User {
