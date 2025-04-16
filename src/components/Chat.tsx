@@ -1,16 +1,16 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useLocation, Navigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
-import './Chat.css';
-import PasswordModal from './PasswordModal';
-import { debounce } from 'lodash';
-import type { Database } from '../types/supabase';
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useLocation, Navigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+import "./Chat.css";
+import PasswordModal from "./PasswordModal";
+import { debounce } from "lodash";
+import type { Database } from "../types/supabase";
 
-type Message = Database['public']['Tables']['messages']['Row'];
+type Message = Database["public"]["Tables"]["messages"]["Row"];
 
 const MESSAGES_PER_PAGE = 20;
-const RESET_PASSWORD = import.meta.env.VITE_RESET_PASSWORD || '1234';
+const RESET_PASSWORD = import.meta.env.VITE_RESET_PASSWORD || "1234";
 const SCROLL_THRESHOLD = 100;
 const DEBOUNCE_DELAY = 150;
 
@@ -24,11 +24,13 @@ export default function Chat() {
   }
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<'연결 중...' | '연결됨' | '연결 끊김'>('연결 중...');
+  const [connectionStatus, setConnectionStatus] = useState<
+    "연결 중..." | "연결됨" | "연결 끊김"
+  >("연결 중...");
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(true);
 
@@ -58,38 +60,38 @@ export default function Chat() {
   // 초기 메시지 로드
   const fetchInitialMessages = useCallback(async () => {
     if (isLoading) return;
-    
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: true })
+        .from("messages")
+        .select("*")
+        .order("created_at", { ascending: true })
         .limit(MESSAGES_PER_PAGE);
-        
+
       if (error) throw error;
-      
+
       if (data) {
         const uniqueMessages = data.filter(
-          msg => !messageCache.current.has(msg.id)
+          (msg) => !messageCache.current.has(msg.id)
         );
-        
-        uniqueMessages.forEach(msg => messageCache.current.set(msg.id, msg));
-        setMessages(prev => {
+
+        uniqueMessages.forEach((msg) => messageCache.current.set(msg.id, msg));
+        setMessages((prev) => {
           const newMessages = [...prev];
-          uniqueMessages.forEach(msg => {
-            if (!newMessages.some(m => m.id === msg.id)) {
+          uniqueMessages.forEach((msg) => {
+            if (!newMessages.some((m) => m.id === msg.id)) {
               newMessages.push(msg);
             }
           });
           return newMessages;
         });
-        
+
         setHasMore(data.length === MESSAGES_PER_PAGE);
       }
     } catch (error) {
-      console.error('메시지 로딩 중 오류:', error);
-      setError('메시지를 불러오는데 실패했습니다.');
+      console.error("메시지 로딩 중 오류:", error);
+      setError("메시지를 불러오는데 실패했습니다.");
     } finally {
       setIsLoading(false);
     }
@@ -106,41 +108,39 @@ export default function Chat() {
           await channelRef.current.unsubscribe();
         }
 
-        const channel = supabase
-          .channel('messages')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'messages'
-            },
-            (payload) => {
-              if (!isSubscribed) return;
+        const channel = supabase.channel("messages").on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "messages",
+          },
+          (payload) => {
+            if (!isSubscribed) return;
 
-              if (payload.eventType === 'INSERT') {
-                const newMessage = payload.new as Message;
-                if (!messageCache.current.has(newMessage.id)) {
-                  messageCache.current.set(newMessage.id, newMessage);
-                  setMessages(prev => [...prev, newMessage]);
-                  if (shouldScrollToBottom) {
-                    setTimeout(scrollToBottom, 100);
-                  }
+            if (payload.eventType === "INSERT") {
+              const newMessage = payload.new as Message;
+              if (!messageCache.current.has(newMessage.id)) {
+                messageCache.current.set(newMessage.id, newMessage);
+                setMessages((prev) => [...prev, newMessage]);
+                if (shouldScrollToBottom) {
+                  setTimeout(scrollToBottom, 100);
                 }
               }
             }
-          );
+          }
+        );
 
         // 구독 상태 처리
         channel.subscribe(async (status) => {
           if (!isSubscribed) return;
-          
-          if (status === 'SUBSCRIBED') {
-            setConnectionStatus('연결됨');
+
+          if (status === "SUBSCRIBED") {
+            setConnectionStatus("연결됨");
             // 구독 성공 후 초기 메시지 로드
             await fetchInitialMessages();
           } else {
-            setConnectionStatus('연결 끊김');
+            setConnectionStatus("연결 끊김");
             // 재연결 시도
             setTimeout(setupRealtimeSubscription, 3000);
           }
@@ -148,9 +148,9 @@ export default function Chat() {
 
         channelRef.current = channel;
       } catch (error) {
-        console.error('실시간 구독 설정 오류:', error);
+        console.error("실시간 구독 설정 오류:", error);
         if (isSubscribed) {
-          setConnectionStatus('연결 끊김');
+          setConnectionStatus("연결 끊김");
           // 에러 발생 시 재연결 시도
           setTimeout(setupRealtimeSubscription, 3000);
         }
@@ -168,46 +168,44 @@ export default function Chat() {
   }, [fetchInitialMessages, shouldScrollToBottom, scrollToBottom]);
 
   // 메시지 전송 최적화
-  const sendMessage = useCallback(async (content: string) => {
-    if (!user || !content.trim()) return;
+  const sendMessage = useCallback(
+    async (content: string) => {
+      if (!user || !content.trim()) return;
 
-    try {
-      // UUID v4 생성
-      const messageId = crypto.randomUUID();
-      
-      const messageData = {
-        id: messageId,
-        content: content.trim(),
-        user_name: user.properties.nickname,
-        user_id: messageId, // 메시지 ID를 user_id로 사용
-        profile_image: user.properties.profile_image || null,
-        created_at: new Date().toISOString()
-      };
+      try {
+        const messageData = {
+          content: content.trim(),
+          user_name: user.properties.nickname,
+          user_id: user.id,
+          profile_image: user.properties.profile_image || null,
+        };
 
-      const { data, error } = await supabase
-        .from('messages')
-        .insert([messageData])
-        .select()
-        .single();
+        const { data, error } = await supabase
+          .from("messages")
+          .insert([messageData])
+          .select()
+          .single();
 
-      if (error) {
-        console.error('메시지 전송 오류:', error);
-        throw error;
-      }
-
-      // 전송 성공 시 로컬 상태 업데이트
-      if (data) {
-        messageCache.current.set(data.id, data);
-        setMessages(prev => [...prev, data]);
-        if (shouldScrollToBottom) {
-          setTimeout(scrollToBottom, 100);
+        if (error) {
+          console.error("메시지 전송 오류:", error);
+          throw error;
         }
+
+        // 전송 성공 시 로컬 상태 업데이트
+        if (data) {
+          messageCache.current.set(data.id, data);
+          setMessages((prev) => [...prev, data]);
+          if (shouldScrollToBottom) {
+            setTimeout(scrollToBottom, 100);
+          }
+        }
+      } catch (err) {
+        console.error("메시지 전송 실패:", err);
+        throw err;
       }
-    } catch (err) {
-      console.error('메시지 전송 실패:', err);
-      throw err;
-    }
-  }, [user, shouldScrollToBottom, scrollToBottom]);
+    },
+    [user, shouldScrollToBottom, scrollToBottom]
+  );
 
   // 초기 메시지 로드는 컴포넌트 마운트 시 한 번만 실행
   useEffect(() => {
@@ -218,8 +216,8 @@ export default function Chat() {
         await fetchInitialMessages();
       } catch (error) {
         if (isSubscribed) {
-          console.error('초기 메시지 로딩 실패:', error);
-          setError('메시지를 불러오는데 실패했습니다.');
+          console.error("초기 메시지 로딩 실패:", error);
+          setError("메시지를 불러오는데 실패했습니다.");
         }
       }
     };
@@ -234,29 +232,29 @@ export default function Chat() {
   // 이전 메시지 로드
   const fetchPreviousMessages = useCallback(async () => {
     if (isLoading || !hasMore || messages.length === 0) return;
-    
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .lt('created_at', messages[0].created_at)
+        .from("messages")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .lt("created_at", messages[0].created_at)
         .limit(MESSAGES_PER_PAGE);
-        
+
       if (error) throw error;
-      
+
       if (data) {
         const reversedData = data.reverse() as Message[];
-        setMessages(prev => [...reversedData, ...prev]);
+        setMessages((prev) => [...reversedData, ...prev]);
         setHasMore(data.length === MESSAGES_PER_PAGE);
-        
+
         // 메시지 캐시 업데이트
-        reversedData.forEach(msg => messageCache.current.set(msg.id, msg));
+        reversedData.forEach((msg) => messageCache.current.set(msg.id, msg));
       }
     } catch (error) {
-      console.error('이전 메시지 로딩 중 오류:', error);
-      setError('이전 메시지를 불러오는데 실패했습니다.');
+      console.error("이전 메시지 로딩 중 오류:", error);
+      setError("이전 메시지를 불러오는데 실패했습니다.");
     } finally {
       setIsLoading(false);
     }
@@ -265,19 +263,19 @@ export default function Chat() {
   // 채팅 초기화
   const handleChatReset = async (password: string) => {
     if (password !== RESET_PASSWORD) {
-      setError('비밀번호가 일치하지 않습니다.');
+      setError("비밀번호가 일치하지 않습니다.");
       return;
     }
 
     try {
       // 모든 메시지 삭제 시도
       const { error: deleteError } = await supabase
-        .from('messages')
+        .from("messages")
         .delete()
-        .gt('id', '0'); // 모든 레코드 선택
+        .gt("id", "0"); // 모든 레코드 선택
 
       if (deleteError) {
-        console.error('삭제 에러:', deleteError);
+        console.error("삭제 에러:", deleteError);
         throw deleteError;
       }
 
@@ -288,30 +286,32 @@ export default function Chat() {
       setError(null);
 
       // 다른 클라이언트들에게 초기화 알림
-      const channel = supabase.channel('chat_reset');
+      const channel = supabase.channel("chat_reset");
       await channel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
+        if (status === "SUBSCRIBED") {
           await channel.send({
-            type: 'broadcast',
-            event: 'chat_reset',
-            payload: { timestamp: new Date().toISOString() }
+            type: "broadcast",
+            event: "chat_reset",
+            payload: { timestamp: new Date().toISOString() },
           });
           channel.unsubscribe();
         }
       });
-
     } catch (error: any) {
-      console.error('채팅 초기화 중 오류:', error);
-      setError(error?.message || '채팅 초기화에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      console.error("채팅 초기화 중 오류:", error);
+      setError(
+        error?.message ||
+          "채팅 초기화에 실패했습니다. 잠시 후 다시 시도해주세요."
+      );
     }
   };
 
   // 채팅 초기화 이벤트 구독
   useEffect(() => {
-    const resetChannel = supabase.channel('chat_reset');
-    
+    const resetChannel = supabase.channel("chat_reset");
+
     resetChannel
-      .on('broadcast', { event: 'chat_reset' }, () => {
+      .on("broadcast", { event: "chat_reset" }, () => {
         // 다른 클라이언트에서 초기화가 발생했을 때
         setMessages([]);
         messageCache.current.clear();
@@ -324,23 +324,26 @@ export default function Chat() {
   }, []);
 
   // 스크롤 이벤트 핸들러
-  const handleScroll = useCallback(debounce(() => {
-    if (!chatMessagesRef.current) return;
-    
-    const { scrollTop } = chatMessagesRef.current;
-    if (scrollTop === 0) {
-      fetchPreviousMessages();
-    }
-    
-    setShouldScrollToBottom(isNearBottom());
-  }, DEBOUNCE_DELAY), [fetchPreviousMessages, isNearBottom]);
+  const handleScroll = useCallback(
+    debounce(() => {
+      if (!chatMessagesRef.current) return;
+
+      const { scrollTop } = chatMessagesRef.current;
+      if (scrollTop === 0) {
+        fetchPreviousMessages();
+      }
+
+      setShouldScrollToBottom(isNearBottom());
+    }, DEBOUNCE_DELAY),
+    [fetchPreviousMessages, isNearBottom]
+  );
 
   // 스크롤 이벤트 리스너
   useEffect(() => {
     const messagesDiv = chatMessagesRef.current;
     if (messagesDiv) {
-      messagesDiv.addEventListener('scroll', handleScroll);
-      return () => messagesDiv.removeEventListener('scroll', handleScroll);
+      messagesDiv.addEventListener("scroll", handleScroll);
+      return () => messagesDiv.removeEventListener("scroll", handleScroll);
     }
   }, [handleScroll]);
 
@@ -352,27 +355,30 @@ export default function Chat() {
   }, [messages, shouldScrollToBottom, scrollToBottom]);
 
   // 폼 제출 핸들러
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedMessage = newMessage.trim();
-    
-    if (!trimmedMessage || !user) return;
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmedMessage = newMessage.trim();
 
-    setNewMessage('');
-    setShouldScrollToBottom(true);
-    setTimeout(scrollToBottom, 100);
-    
-    try {
-      await sendMessage(trimmedMessage);
-    } catch (err) {
-      setError('메시지 전송에 실패했습니다.');
-      setNewMessage(trimmedMessage);
-    }
-  }, [newMessage, user, sendMessage, scrollToBottom]);
+      if (!trimmedMessage || !user) return;
+
+      setNewMessage("");
+      setShouldScrollToBottom(true);
+      setTimeout(scrollToBottom, 100);
+
+      try {
+        await sendMessage(trimmedMessage);
+      } catch (err) {
+        setError("메시지 전송에 실패했습니다.");
+        setNewMessage(trimmedMessage);
+      }
+    },
+    [newMessage, user, sendMessage, scrollToBottom]
+  );
 
   // 페이지 진입 시 스크롤 처리
   useEffect(() => {
-    if (location.pathname === '/chat') {
+    if (location.pathname === "/chat") {
       setTimeout(scrollToBottom, 100);
     }
   }, [location.pathname, scrollToBottom]);
@@ -380,7 +386,7 @@ export default function Chat() {
   // 사용자 이름 저장
   useEffect(() => {
     if (user) {
-      localStorage.setItem('chat_username', user.properties.nickname);
+      localStorage.setItem("chat_username", user.properties.nickname);
     }
   }, [user]);
 
@@ -390,13 +396,15 @@ export default function Chat() {
       <div
         key={message.id}
         ref={index === messages.length - 1 ? lastMessageRef : undefined}
-        className={`chat-message ${message.user_id === message.id ? 'my-message' : ''}`}
+        className={`chat-message ${
+          message.user_id === message.id ? "my-message" : ""
+        }`}
       >
         <div className="message-header">
           {message.profile_image && (
-            <img 
-              src={message.profile_image} 
-              alt={message.user_name} 
+            <img
+              src={message.profile_image}
+              alt={message.user_name}
               className="message-profile-image"
             />
           )}
@@ -416,16 +424,18 @@ export default function Chat() {
         <div className="chat-header-content">
           <h2>실시간 채팅</h2>
           <div className="chat-controls">
-            <span className={`connection-status ${
-              connectionStatus === '연결됨' 
-                ? 'connected' 
-                : connectionStatus === '연결 끊김' 
-                  ? 'disconnected' 
-                  : ''
-            }`}>
+            <span
+              className={`connection-status ${
+                connectionStatus === "연결됨"
+                  ? "connected"
+                  : connectionStatus === "연결 끊김"
+                  ? "disconnected"
+                  : ""
+              }`}
+            >
               {connectionStatus}
             </span>
-            <button 
+            <button
               onClick={() => setIsResetModalOpen(true)}
               className="chat-reset-button"
               aria-label="채팅 초기화"

@@ -1,18 +1,18 @@
 import { FC } from 'react';
+import { CounterState } from '../types/counter';
 import './Counter.css';
 
-interface CounterProps {
-  count: number;
-  onIncrement: () => void;
-  onReset: () => void;
-  error: string | null;
+interface CounterProps extends CounterState {
+  onIncrement: () => Promise<void>;
+  onReset: () => Promise<void>;
 }
 
 const Counter: FC<CounterProps> = ({
   count,
   onIncrement,
   onReset,
-  error
+  error,
+  isLoading
 }) => {
   return (
     <div className="counter-section">
@@ -33,10 +33,18 @@ const Counter: FC<CounterProps> = ({
         </div>
 
         <div className="counter-actions">
-          <button onClick={onIncrement} className="action-button primary">
-            날먹하기
+          <button 
+            onClick={onIncrement} 
+            className="action-button primary"
+            disabled={isLoading}
+          >
+            {isLoading ? '처리중...' : '날먹하기'}
           </button>
-          <button onClick={onReset} className="action-button secondary">
+          <button 
+            onClick={onReset} 
+            className="action-button secondary"
+            disabled={isLoading}
+          >
             리셋
           </button>
         </div>
