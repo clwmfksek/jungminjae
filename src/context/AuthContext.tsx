@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import React, { createContext, useContext, useReducer, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
 interface KakaoAPIUser {
   id: number;
@@ -16,7 +16,8 @@ interface KakaoAPIUser {
 }
 
 interface KakaoUser {
-  id: string;
+  id: string; // kakao id
+  supabaseId: string; // supabase uuid
   properties: {
     nickname: string;
     profile_image: string;
@@ -45,37 +46,37 @@ interface AuthContextType {
 const initialState: AuthState = {
   user: null,
   loading: true,
-  error: null
+  error: null,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function authReducer(state: AuthState, action: any) {
   switch (action.type) {
-    case 'SET_USER':
+    case "SET_USER":
       return {
         ...state,
         user: action.payload,
         loading: false,
-        error: null
+        error: null,
       };
-    case 'SET_LOADING':
+    case "SET_LOADING":
       return {
         ...state,
-        loading: action.payload
+        loading: action.payload,
       };
-    case 'SET_ERROR':
+    case "SET_ERROR":
       return {
         ...state,
         error: action.payload,
-        loading: false
+        loading: false,
       };
-    case 'LOGOUT':
+    case "LOGOUT":
       return {
         ...state,
         user: null,
         loading: false,
-        error: null
+        error: null,
       };
     default:
       return state;
@@ -87,24 +88,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initializeAuth = () => {
-      const savedUser = localStorage.getItem('kakao_user');
+      const savedUser = localStorage.getItem("kakao_user");
       if (savedUser) {
         try {
           const parsedUser = JSON.parse(savedUser);
           // 토큰이 있는지 확인
           if (parsedUser.token && parsedUser.token.access_token) {
-            dispatch({ type: 'SET_USER', payload: parsedUser });
+            dispatch({ type: "SET_USER", payload: parsedUser });
           } else {
-            localStorage.removeItem('kakao_user');
-            dispatch({ type: 'SET_LOADING', payload: false });
+            localStorage.removeItem("kakao_user");
+            dispatch({ type: "SET_LOADING", payload: false });
           }
         } catch (error) {
-          console.error('사용자 정보 파싱 실패:', error);
-          localStorage.removeItem('kakao_user');
-          dispatch({ type: 'SET_LOADING', payload: false });
+          console.error("사용자 정보 파싱 실패:", error);
+          localStorage.removeItem("kakao_user");
+          dispatch({ type: "SET_LOADING", payload: false });
         }
       } else {
-        dispatch({ type: 'SET_LOADING', payload: false });
+        dispatch({ type: "SET_LOADING", payload: false });
       }
     };
 
@@ -113,102 +114,120 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (code: string) => {
     try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      
+      dispatch({ type: "SET_LOADING", payload: true });
+
       // 카카오 토큰 요청
       const params = new URLSearchParams({
-        grant_type: 'authorization_code',
+        grant_type: "authorization_code",
         client_id: import.meta.env.VITE_KAKAO_CLIENT_ID,
         redirect_uri: import.meta.env.VITE_KAKAO_REDIRECT_URI,
         code: code,
-        client_secret: import.meta.env.VITE_KAKAO_CLIENT_SECRET
+        client_secret: import.meta.env.VITE_KAKAO_CLIENT_SECRET,
       });
 
-      const tokenResponse = await fetch('https://kauth.kakao.com/oauth/token', {
-        method: 'POST',
+      const tokenResponse = await fetch("https://kauth.kakao.com/oauth/token", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
         },
         body: params.toString(),
       });
 
       if (!tokenResponse.ok) {
         const tokenData = await tokenResponse.json();
-        console.error('카카오 토큰 요청 실패:', tokenData);
-        throw new Error(tokenData.error_description || '토큰 받기 실패');
+        console.error("카카오 토큰 요청 실패:", tokenData);
+        throw new Error(tokenData.error_description || "토큰 받기 실패");
       }
 
       const tokenData = await tokenResponse.json();
 
       // 카카오 사용자 정보 요청
-      const userResponse = await fetch('https://kapi.kakao.com/v2/user/me', {
+      const userResponse = await fetch("https://kapi.kakao.com/v2/user/me", {
         headers: {
           Authorization: `Bearer ${tokenData.access_token}`,
-          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+          "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
         },
       });
 
       if (!userResponse.ok) {
-        console.error('카카오 사용자 정보 요청 실패:', await userResponse.json());
-        throw new Error('사용자 정보 가져오기 실패');
+        console.error(
+          "카카오 사용자 정보 요청 실패:",
+          await userResponse.json()
+        );
+        throw new Error("사용자 정보 가져오기 실패");
       }
 
-      const userData = await userResponse.json();
+      const kakaoUserData = await userResponse.json();
       const defaultProfileImage = `https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y`;
-      
+
       const user: KakaoUser = {
-        id: userData.id.toString(),
+        id: kakaoUserData.id.toString(),
+        supabaseId: "",
         properties: {
-          nickname: userData.properties.nickname || '사용자',
-          profile_image: userData.properties.profile_image || defaultProfileImage,
-          thumbnail_image: userData.properties.thumbnail_image || defaultProfileImage
+          nickname: kakaoUserData.properties.nickname || "사용자",
+          profile_image:
+            kakaoUserData.properties.profile_image || defaultProfileImage,
+          thumbnail_image:
+            kakaoUserData.properties.thumbnail_image || defaultProfileImage,
         },
         token: {
           access_token: tokenData.access_token,
           refresh_token: tokenData.refresh_token,
           expires_in: tokenData.expires_in,
-          refresh_token_expires_in: tokenData.refresh_token_expires_in
-        }
+          refresh_token_expires_in: tokenData.refresh_token_expires_in,
+        },
       };
 
       // Supabase에 사용자 정보 저장
-      const { error: upsertError } = await supabase
-        .from('users')
-        .upsert({
-          id: user.id,
-          kakao_id: user.id,
-          nickname: user.properties.nickname,
-          profile_image: user.properties.profile_image,
-          last_login: new Date().toISOString()
-        }, {
-          onConflict: 'kakao_id'
-        });
+      const { data: supabaseUserData, error: upsertError } = await supabase
+        .from("users")
+        .upsert(
+          {
+            id: user.id,
+            kakao_id: user.id,
+            nickname: user.properties.nickname,
+            profile_image: user.properties.profile_image,
+            last_login: new Date().toISOString(),
+          },
+          {
+            onConflict: "kakao_id",
+          }
+        )
+        .select()
+        .single();
 
       if (upsertError) {
-        console.error('Supabase 사용자 정보 저장 실패:', upsertError);
+        console.error("Supabase 사용자 정보 저장 실패:", upsertError);
         throw upsertError;
       }
 
+      // Supabase UUID를 사용자 정보에 추가
+      user.supabaseId = supabaseUserData.id;
+
       // 사용자 정보를 localStorage에 저장
-      localStorage.setItem('kakao_user', JSON.stringify(user));
-      dispatch({ type: 'SET_USER', payload: user });
-      dispatch({ type: 'SET_LOADING', payload: false });
+      localStorage.setItem("kakao_user", JSON.stringify(user));
+      dispatch({ type: "SET_USER", payload: user });
+      dispatch({ type: "SET_LOADING", payload: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '로그인 실패';
-      console.error('로그인 처리 중 에러:', error);
-      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      const errorMessage =
+        error instanceof Error ? error.message : "로그인 실패";
+      console.error("로그인 처리 중 에러:", error);
+      dispatch({ type: "SET_ERROR", payload: errorMessage });
       throw error;
     }
   };
 
   const logout = async () => {
     try {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      localStorage.removeItem('kakao_user');
-      dispatch({ type: 'LOGOUT' });
+      dispatch({ type: "SET_LOADING", payload: true });
+      localStorage.removeItem("kakao_user");
+      dispatch({ type: "LOGOUT" });
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '로그아웃 실패' });
+      dispatch({
+        type: "SET_ERROR",
+        payload: error instanceof Error ? error.message : "로그아웃 실패",
+      });
       throw error;
     }
   };
@@ -223,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-} 
+}

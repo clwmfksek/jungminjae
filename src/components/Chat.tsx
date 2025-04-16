@@ -176,7 +176,7 @@ export default function Chat() {
         const messageData = {
           content: content.trim(),
           user_name: user.properties.nickname,
-          user_id: user.id,
+          user_id: user.supabaseId,
           profile_image: user.properties.profile_image || null,
         };
 
